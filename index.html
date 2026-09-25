@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>書き起こし一覧 ＆ 統合年表（閲覧専用）</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<div class="app-header px-6 py-5 sm:px-10">
+  <div class="flex items-center gap-4">
+    <button id="sidebarToggle" class="sidebar-toggle" onclick="toggleSidebar()" aria-label="メニューを開く" title="メニュー">
+      <i class="fa-solid fa-bars"></i>
+    </button>
+    <div class="w-11 h-11 rounded-full flex items-center justify-center border-2 flex-shrink-0" style="border-color:var(--gold)">
+      <i class="fa-solid fa-scroll" style="color:var(--gold)"></i>
+    </div>
+    <div class="min-w-0">
+      <h1 class="font-display text-2xl sm:text-3xl tracking-wide">書き起こし一覧 ＆ 統合年表</h1>
+      <p class="text-xs sm:text-sm mt-1" style="color:#b9c2d6">閲覧専用ビューア（編集はできません）</p>
+    </div>
+  </div>
+</div>
+
+<div id="bootStatus" class="text-center text-xs py-2" style="background:var(--gold-soft); color:var(--navy)">
+  <i class="fa-solid fa-cloud-arrow-down mr-1"></i>データを読み込み中…
+</div>
+
+<!-- ============ サイドバー（ナビゲーション） ============ -->
+<div id="sidebarOverlay" class="sidebar-overlay" onclick="closeSidebar()"></div>
+<nav id="sidebar" class="sidebar" aria-label="メインナビゲーション">
+  <div class="sidebar-head">
+    <span class="font-display text-sm" style="color:var(--gold)">メニュー</span>
+    <button class="sidebar-close" onclick="closeSidebar()" aria-label="メニューを閉じる"><i class="fa-solid fa-xmark"></i></button>
+  </div>
+  <p class="sidebar-group-label">閲覧</p>
+  <div class="tab-btn active" data-tab="timeline"><i class="fa-solid fa-timeline"></i>統合年表</div>
+  <div class="tab-btn" data-tab="archive"><i class="fa-solid fa-boxes-stacked"></i>書き起こし一覧</div>
+  <div class="tab-btn" data-tab="terms"><i class="fa-solid fa-book-open"></i>AI解説（用語辞典）</div>
+  <div class="tab-btn" data-tab="persons"><i class="fa-solid fa-users"></i>人物データベース</div>
+  <div class="tab-btn" data-tab="search"><i class="fa-solid fa-magnifying-glass"></i>横断検索</div>
+</nav>
+
+<div id="mainWrap" class="main-wrap">
+  <main class="px-4 py-6 sm:px-10 sm:py-8 max-w-5xl mx-auto">
+
+    <!-- ============ VIEW: 統合年表 ============ -->
+    <section id="view-timeline" class="view active">
+      <div class="panel p-4 mb-6 space-y-3">
+        <p class="text-xs text-gray-400"><i class="fa-solid fa-hand-pointer mr-1"></i>項目をタップすると詳細が開きます（日付は和暦表示）</p>
+        <div id="eraJumpBar" class="flex flex-wrap items-center gap-2 pt-3 border-t" style="border-color:var(--line)"></div>
+        <div class="flex flex-wrap items-center gap-2 pt-3 border-t" style="border-color:var(--line)">
+          <span class="text-xs font-semibold" style="color:var(--gray)">表示対象（複数選択可）：</span>
+          <button type="button" class="filter-btn active" data-typekey="doc" onclick="toggleTypeFilter('doc')">御書・御指導</button>
+          <button type="button" class="filter-btn active" data-typekey="general" onclick="toggleTypeFilter('general')">一般出来事</button>
+          <button type="button" class="filter-btn active" data-typekey="follower" onclick="toggleTypeFilter('follower')">門下出来事</button>
+          <span class="text-xs font-semibold ml-2" style="color:var(--gray)">人物：</span>
+          <select id="personFilter" class="field-select" style="width:auto" onchange="renderTimeline()"><option value="all">全員</option></select>
+        </div>
+        <div class="relative">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+          <input type="text" id="timelineSearch" class="field-input pl-8" placeholder="御書名・出来事名・小見出し・御文で検索…" oninput="renderTimeline()">
+        </div>
+      </div>
+      <div id="timelineContainer" class="timeline-wrap"></div>
+    </section>
+
+    <!-- ============ VIEW: 書き起こし一覧 ============ -->
+    <section id="view-archive" class="view">
+      <div class="panel p-4 mb-6">
+        <p class="text-sm text-gray-500"><i class="fa-solid fa-circle-info mr-1"></i>統合年表に出ていない御書・御指導（総幹部会など）も、ここからは必ず見つけられます。カテゴリを選び、次に題名を選んでください。</p>
+      </div>
+      <div id="archiveContainer"></div>
+    </section>
+
+    <!-- ============ VIEW: AI解説 ============ -->
+    <section id="view-terms" class="view">
+      <div class="panel p-4 mb-6 space-y-3">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-xs font-semibold" style="color:var(--gray)">カテゴリ：</span>
+          <button class="filter-btn active" data-catfilter="all" onclick="setNoteCategoryFilter('all')">すべて</button>
+          <button class="filter-btn" data-catfilter="person" onclick="setNoteCategoryFilter('person')">人物</button>
+          <button class="filter-btn" data-catfilter="term" onclick="setNoteCategoryFilter('term')">語句</button>
+          <button class="filter-btn" data-catfilter="event" onclick="setNoteCategoryFilter('event')">出来事</button>
+        </div>
+        <div class="relative">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+          <input type="text" id="noteSearch" class="field-input pl-8" placeholder="語句・読みで検索…" oninput="renderTerms()">
+        </div>
+        <p class="text-xs text-gray-400">語句の読み（ふりがな）順に50音順で表示しています。</p>
+      </div>
+      <div id="termsContainer" class="space-y-2"></div>
+    </section>
+
+    <!-- ============ VIEW: 人物データベース ============ -->
+    <section id="view-persons" class="view">
+      <div class="panel p-4 mb-6 space-y-3">
+        <div class="relative">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+          <input type="text" id="personCardSearch" class="field-input pl-8" placeholder="氏名・別称・概要で検索…" oninput="onPersonCardSearch()">
+        </div>
+        <div>
+          <span class="text-xs font-semibold" style="color:var(--gray)">50音：</span>
+          <div id="personKanaIndex" class="inline-flex flex-wrap gap-1"></div>
+        </div>
+        <div>
+          <span class="text-xs font-semibold" style="color:var(--gray)">関係性：</span>
+          <div id="personRelationFilter" class="inline-flex flex-wrap gap-1"></div>
+        </div>
+        <div>
+          <span class="text-xs font-semibold" style="color:var(--gray)">時代：</span>
+          <div id="personPeriodFilter" class="inline-flex flex-wrap gap-1"></div>
+        </div>
+      </div>
+      <div id="personCardGrid" class="person-card-grid"></div>
+    </section>
+
+    <!-- ============ VIEW: 横断検索 ============ -->
+    <section id="view-search" class="view">
+      <div class="panel p-4 mb-6 space-y-3">
+        <div class="relative">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+          <input type="text" id="crossSearchInput" class="field-input pl-8" placeholder="キーワードで御書・講義録・年表・人物DBを横断検索…" oninput="onCrossSearchInput()">
+        </div>
+        <div id="searchTabs" class="flex flex-wrap gap-2"></div>
+      </div>
+      <div id="searchResults" class="space-y-2"></div>
+    </section>
+
+  </main>
+</div>
+
+<!-- 年表・書き起こし一覧：項目の詳細ポップアップ -->
+<div id="tlDetailModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" style="background:rgba(15,26,48,.55)" onclick="if(event.target===this)closeModal('tlDetailModal')">
+  <div class="panel p-5 w-full max-w-2xl max-h-[85vh] flex flex-col">
+    <div id="tlDetailBody" class="tl-modal-body overflow-y-auto flex-1 pr-1"></div>
+    <div class="flex justify-end mt-3 flex-shrink-0">
+      <button class="btn btn-outline" onclick="closeModal('tlDetailModal')"><i class="fa-solid fa-xmark"></i>閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- 本文全文モーダル -->
+<div id="fullTextModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" style="background:rgba(15,26,48,.55)">
+  <div class="panel p-6 w-full max-w-2xl max-h-[85vh] flex flex-col">
+    <h3 id="fullTextModalTitle" class="font-display text-lg mb-3 flex-shrink-0" style="color:var(--navy)"><i class="fa-solid fa-file-lines mr-2"></i></h3>
+    <div id="fullTextModalBody" class="structured-text text-sm overflow-y-auto p-3 rounded-lg flex-1" style="background:var(--paper-dim); line-height:1.9"></div>
+    <div class="flex justify-end gap-2 mt-4 flex-shrink-0">
+      <button id="fullTextModalPdfBtn" class="btn btn-gold"><i class="fa-solid fa-file-pdf"></i>PDF出力</button>
+      <button class="btn btn-outline" onclick="closeModal('fullTextModal')">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- AI解説：出典ポップアップ -->
+<div id="sourcePopup" class="fixed inset-0 z-50 hidden items-center justify-center p-4" style="background:rgba(15,26,48,.55)">
+  <div class="panel p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+    <h3 class="font-display text-lg mb-3" style="color:var(--navy)"><i class="fa-solid fa-book mr-2"></i>出典</h3>
+    <div id="sourcePopupBody" class="space-y-2 text-sm"></div>
+    <div class="flex justify-end mt-5">
+      <button class="btn btn-outline" onclick="closeModal('sourcePopup')">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- AI解説：他文書での使用箇所モーダル -->
+<div id="crossUsageModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" style="background:rgba(15,26,48,.55)">
+  <div class="panel p-6 w-full max-w-lg max-h-[85vh] overflow-y-auto">
+    <h3 id="crossUsageTitle" class="font-display text-lg mb-3" style="color:var(--navy)"><i class="fa-solid fa-magnifying-glass mr-2"></i>他での使用箇所</h3>
+    <div id="crossUsageBody" class="space-y-2 text-sm"></div>
+    <div class="flex justify-end mt-5">
+      <button class="btn btn-outline" onclick="closeModal('crossUsageModal')">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- 人物DB：詳細ポップアップ -->
+<div id="personDetailModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" style="background:rgba(15,26,48,.55)">
+  <div class="panel p-6 w-full max-w-xl max-h-[85vh] flex flex-col">
+    <h3 id="personDetailTitle" class="font-display text-lg mb-3 flex-shrink-0" style="color:var(--navy)"></h3>
+    <div id="personDetailBody" class="text-sm overflow-y-auto flex-1"></div>
+    <div class="flex justify-end mt-4 flex-shrink-0">
+      <button class="btn btn-outline" onclick="closeModal('personDetailModal')">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- 横断検索：プレビューモーダル -->
+<div id="searchPreviewModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" style="background:rgba(15,26,48,.55)">
+  <div class="panel p-6 w-full max-w-xl max-h-[85vh] flex flex-col">
+    <h3 id="searchPreviewTitle" class="font-display text-lg mb-3 flex-shrink-0" style="color:var(--navy)"></h3>
+    <div id="searchPreviewBody" class="text-sm whitespace-pre-wrap overflow-y-auto p-3 rounded-lg flex-1" style="background:var(--paper-dim); line-height:1.9"></div>
+    <div class="flex justify-end gap-2 mt-4 flex-shrink-0">
+      <button class="btn btn-outline" onclick="closeModal('searchPreviewModal')">閉じる</button>
+      <button id="searchPreviewGotoBtn" class="btn btn-gold"><i class="fa-solid fa-arrow-right"></i>詳細を見る</button>
+    </div>
+  </div>
+</div>
+
+<!-- db.js が参照するが、閲覧専用ビューアでは使わない要素（無いとエラーになるためダミーで設置） -->
+<input type="file" id="importJsonInput" class="hidden" accept="application/json">
+
+<!-- 右下の「▲上へ」ボタン -->
+<div id="toTopWrap" class="to-top-wrap">
+  <span id="toTopEra" class="to-top-era"></span>
+  <button type="button" class="to-top-btn" onclick="scrollToTop()" aria-label="ページの先頭へ戻る" title="上へ"><i class="fa-solid fa-chevron-up"></i></button>
+</div>
+
+<script src="js/db.js"></script>
+<script src="js/eras.js"></script>
+<script src="js/timeline.js"></script>
+<script src="js/render.js"></script>
+<script src="js/ai-notes.js"></script>
+<script src="js/search.js"></script>
+<script src="js/viewer.js"></script>
+</body>
+</html>
