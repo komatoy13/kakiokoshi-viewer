@@ -39,8 +39,7 @@
     <button class="sidebar-close" onclick="closeSidebar()" aria-label="メニューを閉じる"><i class="fa-solid fa-xmark"></i></button>
   </div>
   <p class="sidebar-group-label">閲覧</p>
-  <div class="tab-btn active" data-tab="timeline"><i class="fa-solid fa-timeline"></i>統合年表</div>
-  <div class="tab-btn" data-tab="archive"><i class="fa-solid fa-boxes-stacked"></i>書き起こし一覧</div>
+  <div class="tab-btn active" data-tab="archive"><i class="fa-solid fa-boxes-stacked"></i>書き起こし</div>
   <div class="tab-btn" data-tab="terms"><i class="fa-solid fa-book-open"></i>AI解説（用語辞典）</div>
   <div class="tab-btn" data-tab="persons"><i class="fa-solid fa-users"></i>人物データベース</div>
   <div class="tab-btn" data-tab="search"><i class="fa-solid fa-magnifying-glass"></i>横断検索</div>
@@ -49,8 +48,9 @@
 <div id="mainWrap" class="main-wrap">
   <main class="px-4 py-6 sm:px-10 sm:py-8 max-w-5xl mx-auto">
 
-    <!-- ============ VIEW: 統合年表 ============ -->
-    <section id="view-timeline" class="view active">
+    <!-- ============ VIEW: 書き起こし（統合年表／書き起こし一覧の2モードを1タブにまとめたもの） ============ -->
+    <section id="view-archive" class="view active">
+      <div id="khMode-timeline">
       <div class="panel p-4 mb-6 space-y-3">
         <p class="text-xs text-gray-400"><i class="fa-solid fa-hand-pointer mr-1"></i>項目をタップすると詳細が開きます（日付は和暦表示）</p>
         <div id="eraJumpBar" class="flex flex-wrap items-center gap-2 pt-3 border-t" style="border-color:var(--line)"></div>
@@ -68,17 +68,14 @@
         </div>
       </div>
       <div id="timelineContainer" class="timeline-wrap"></div>
-    </section>
-
-    <!-- ============ VIEW: 書き起こし一覧 ============ -->
-    <section id="view-archive" class="view">
+      </div>
+      <div id="khMode-list" style="display:none">
       <div class="panel p-4 mb-6">
         <p class="text-sm text-gray-500"><i class="fa-solid fa-circle-info mr-1"></i>統合年表に出ていない御書・御指導（総幹部会など）も、ここからは必ず見つけられます。カテゴリを選び、次に題名を選んでください。</p>
       </div>
       <div id="archiveContainer"></div>
+      </div>
     </section>
-
-    <!-- ============ VIEW: AI解説 ============ -->
     <section id="view-terms" class="view">
       <div class="panel p-4 mb-6 space-y-3">
         <div class="flex flex-wrap items-center gap-2">
@@ -204,6 +201,13 @@
 
 <!-- db.js が参照するが、閲覧専用ビューアでは使わない要素（無いとエラーになるためダミーで設置） -->
 <input type="file" id="importJsonInput" class="hidden" accept="application/json">
+
+<!-- 「書き起こし」タブ：年表モード⇄一覧モードの切り替えボタン（このタブの時だけ表示） -->
+<div id="kakiokoshiModeToggleWrap" class="kh-mode-toggle-wrap">
+  <button type="button" id="kakiokoshiModeToggleBtn" class="kh-mode-toggle-btn" onclick="toggleKakiokoshiMode()">
+    <i class="fa-solid fa-list"></i>一覧モードへ
+  </button>
+</div>
 
 <!-- 右下の「▲上へ」ボタン -->
 <div id="toTopWrap" class="to-top-wrap">
