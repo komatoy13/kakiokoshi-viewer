@@ -344,3 +344,18 @@ body{
 .archive-cat-card:disabled{opacity:.4; cursor:not-allowed;}
 .archive-cat-card .ac-label{font-weight:700; color:var(--navy); font-size:15px;}
 .archive-cat-card .ac-count{font-size:12px; color:var(--gray);}
+
+/* 「書き起こし」タブ：年表モード⇄一覧モードの切り替えボタン（▲上へボタンのすぐ上に浮かべる） */
+.kh-mode-toggle-wrap{
+  position:fixed; right:16px; bottom:72px; z-index:40;
+  opacity:0; transform:translateY(12px); pointer-events:none;
+  transition:opacity .2s ease, transform .2s ease;
+}
+.kh-mode-toggle-wrap.show{opacity:1; transform:none; pointer-events:auto;}
+.kh-mode-toggle-btn{
+  display:flex; align-items:center; gap:6px;
+  padding:10px 16px; border-radius:999px; border:2px solid var(--gold); cursor:pointer;
+  background:var(--navy); color:var(--gold); font-size:13px; font-weight:700;
+  box-shadow:0 4px 14px rgba(15,26,48,.35);
+}
+.kh-mode-toggle-btn:hover{background:#26375f;}
