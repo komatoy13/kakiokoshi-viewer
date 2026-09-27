@@ -23,7 +23,7 @@ function subheadingText(s){
    下のDEFAULT_GIST_IDに、編集アプリの「設定→公開ビューアへの反映」で
    発行したGist IDを入れておくと、リンクを開くだけで読み込みます。
    （代わりに、リンクの末尾に ?gist=あなたのGistID を付けて共有することもできます） */
-const DEFAULT_GIST_ID = '8e67ce5dccc8fdf00e42a3cd84ebaa2b';
+const DEFAULT_GIST_ID = 'ここに公開用のGist IDを入力してください';
 const PUB_GIST_FILENAME_VIEWER = 'kakiokoshi_viewer_data.json';
 
 function currentGistId(){
@@ -69,7 +69,7 @@ async function bootViewer(){
       note.textContent = '最終更新：'+updated;
       boot.insertAdjacentElement('afterend', note);
     }
-    switchTab('timeline');
+    switchTab('archive');
   }catch(err){
     boot.innerHTML = '<span style="color:#c1473f"><i class="fa-solid fa-triangle-exclamation mr-1"></i>'+escapeHtml(err.message)+'</span>';
   }
@@ -105,8 +105,7 @@ function switchTab(tabName){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   const view = document.getElementById('view-'+tabName);
   if(view) view.classList.add('active');
-  if(tabName==='timeline') renderTimeline();
-  if(tabName==='archive') renderArchive();
+  if(tabName==='archive') setKakiokoshiMode('timeline'); // 「書き起こし」タブは必ず年表モードから始まる
   if(tabName==='terms') renderTerms();
   if(tabName==='persons') renderPersonCards();
   if(tabName==='search') renderSearchResults();
@@ -124,10 +123,14 @@ function updateToTopUi(){
   if(!wrap) return;
   wrap.classList.toggle('show', window.scrollY > 400);
   const pill = document.getElementById('toTopEra');
-  const tlView = document.getElementById('view-timeline');
-  const inTimeline = !!(tlView && tlView.classList.contains('active'));
+  const inTimeline = isKakiokoshiTimelineActive();
   const era = (inTimeline && typeof TL_CURRENT_ERA!=='undefined' && TL_CURRENT_ERA)? getEras().find(x=>x.id===TL_CURRENT_ERA) : null;
   pill.textContent = era? era.name : '';
+  const toggleWrap = document.getElementById('kakiokoshiModeToggleWrap');
+  if(toggleWrap){
+    const archiveView = document.getElementById('view-archive');
+    toggleWrap.classList.toggle('show', !!(archiveView && archiveView.classList.contains('active')));
+  }
 }
 let _scrollTick = false;
 window.addEventListener('scroll', ()=>{

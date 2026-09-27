@@ -221,6 +221,38 @@ let TL_TOKEN = 0;              // 再描画された時に、古い分割描画�
 let TL_ERA_FIRST = {};         // 時代区分ID → その区分に属する最初の行のindex
 let TL_CURRENT_ERA = null;     // 現在画面上部にある時代区分ID（追従ハイライト用）
 let TL_JUMP_LOCK = null;       // ジャンプ直後のハイライト固定 {id, y}
+
+/* ------------------------------------------------------------
+   「書き起こし」タブ：年表モード⇄一覧モードの切り替え
+   統合年表と書き起こし一覧は同じ1つのタブの中の「表示モード」であり、
+   タブを開くと必ず年表モードから始まる（setKakiokoshiMode は switchTab から呼ばれる）。
+   ------------------------------------------------------------ */
+let KAKIOKOSHI_MODE = 'timeline'; // 'timeline' | 'list'
+
+function isKakiokoshiTimelineActive(){
+  const v = document.getElementById('view-archive');
+  return !!(v && v.classList.contains('active') && KAKIOKOSHI_MODE==='timeline');
+}
+
+function setKakiokoshiMode(mode){
+  KAKIOKOSHI_MODE = mode;
+  const tlBlock = document.getElementById('khMode-timeline');
+  const listBlock = document.getElementById('khMode-list');
+  if(tlBlock) tlBlock.style.display = mode==='timeline' ? '' : 'none';
+  if(listBlock) listBlock.style.display = mode==='list' ? '' : 'none';
+  const btn = document.getElementById('kakiokoshiModeToggleBtn');
+  if(btn){
+    btn.innerHTML = mode==='timeline'
+      ? '<i class="fa-solid fa-list"></i>一覧モードへ'
+      : '<i class="fa-solid fa-timeline"></i>年表モードへ';
+  }
+  if(mode==='timeline') renderTimeline(); else renderArchive();
+  if(typeof updateToTopUi==='function') updateToTopUi();
+}
+
+function toggleKakiokoshiMode(){
+  setKakiokoshiMode(KAKIOKOSHI_MODE==='timeline' ? 'list' : 'timeline');
+}
 const TL_FIRST_CHUNK = 120;
 const TL_CHUNK = 250;
 
@@ -347,8 +379,7 @@ function jumpToEra(id){
 
 // 画面上部にある年ヘッダーを二分探索で特定し、その年の時代区分をハイライトする
 function updateEraHighlight(){
-  const view = document.getElementById('view-timeline');
-  if(!view || !view.classList.contains('active')) return;
+  if(!isKakiokoshiTimelineActive()) return;
   if(TL_JUMP_LOCK){
     if(Math.abs(window.scrollY - TL_JUMP_LOCK.y) < 3){ setCurrentEra(TL_JUMP_LOCK.id); return; }
     TL_JUMP_LOCK = null;
