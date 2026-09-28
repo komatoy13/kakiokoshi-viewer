@@ -23,7 +23,7 @@ function subheadingText(s){
    下のDEFAULT_GIST_IDに、編集アプリの「設定→公開ビューアへの反映」で
    発行したGist IDを入れておくと、リンクを開くだけで読み込みます。
    （代わりに、リンクの末尾に ?gist=あなたのGistID を付けて共有することもできます） */
-const DEFAULT_GIST_ID = 'ここに公開用のGist IDを入力してください';
+const DEFAULT_GIST_ID = '8e67ce5dccc8fdf00e42a3cd84ebaa2b';
 const PUB_GIST_FILENAME_VIEWER = 'kakiokoshi_viewer_data.json';
 
 function currentGistId(){
