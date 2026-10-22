@@ -112,9 +112,20 @@ function eraChipList(){
 
 function buildEraSelectOptions(selectedEra){
   const opts = ['<option value="">（元号を選択）</option>'];
-  eraNamesChronological().forEach(era=>{
-    opts.push(`<option value="${escapeHtml(era)}" ${selectedEra===era?'selected':''}>${escapeHtml(era)}（${ERA_TABLE[era]}〜）</option>`);
+  // 元号が200以上あるため、時代ごとにグループ分けして選びやすくする
+  const groups = [
+    {label:'奈良・平安時代', to:1184}, {label:'鎌倉時代', to:1333}, {label:'南北朝・室町時代', to:1572},
+    {label:'安土桃山・江戸時代', to:1867}, {label:'明治以降', to:Infinity}
+  ];
+  const eras = eraNamesChronological();
+  let gi = 0, open = false;
+  eras.forEach(era=>{
+    const y = ERA_TABLE[era];
+    while(gi < groups.length && y > groups[gi].to){ if(open){ opts.push('</optgroup>'); open=false; } gi++; }
+    if(!open){ opts.push('<optgroup label="'+groups[gi].label+'">'); open = true; }
+    opts.push(`<option value="${escapeHtml(era)}" ${selectedEra===era?'selected':''}>${escapeHtml(era)}（${y}〜）</option>`);
   });
+  if(open) opts.push('</optgroup>');
   return opts.join('');
 }
 
@@ -232,9 +243,76 @@ const DEFAULT_PERSONS = [
     relationshipTags:['門下在家'], periodTags:['近代'],
     summary:'顕正会現会長。', bio:'', notes:''}
 ];
-// 寛文/享保 not in ERA_TABLE by default (Edo era) -> add
-ERA_TABLE['寛文']=1661; ERA_TABLE['享保']=1716;
+/* ------------------------------------------------------------
+   全元号表（大宝701年〜令和）：西暦→和暦の計算用。元号名 → 元年（西暦）。
+   ・年単位の表。年の途中で改元があった年は「新しい元号」を採用する（例：1264年→文永元年）。
+   ・南北朝期（1336〜1392）は北朝の元号で統一している。
+   ・既に ERA_TABLE にある元号は上書きしない。
+   ------------------------------------------------------------ */
+const ERA_TABLE_EXTRA = {
+  '大宝':701,'慶雲':704,'和銅':708,'霊亀':715,'養老':717,'神亀':724,'天平':729,'天平勝宝':749,'天平宝字':757,
+  '天平神護':765,'神護景雲':767,'宝亀':770,'天応':781,'延暦':782,'大同':806,'弘仁':810,'天長':824,'承和':834,
+  '嘉祥':848,'仁寿':851,'斉衡':854,'天安':857,'貞観':859,'元慶':877,'仁和':885,'寛平':889,'昌泰':898,
+  '延喜':901,'延長':923,'承平':931,'天慶':938,'天暦':947,'天徳':957,'応和':961,'康保':964,'安和':968,
+  '天禄':970,'天延':973,'貞元':976,'天元':978,'永観':983,'寛和':985,'永延':987,'永祚':989,'正暦':990,
+  '長徳':995,'長保':999,'寛弘':1004,'長和':1012,'寛仁':1017,'治安':1021,'万寿':1024,'長元':1028,
+  '長暦':1037,'長久':1040,'寛徳':1044,'永承':1046,'天喜':1053,'康平':1058,'治暦':1065,'延久':1069,
+  '承保':1074,'承暦':1077,'永保':1081,'応徳':1084,'寛治':1087,'嘉保':1094,'永長':1096,'承徳':1097,
+  '康和':1099,'長治':1104,'嘉承':1106,'天仁':1108,'天永':1110,'永久':1113,'元永':1118,'保安':1120,
+  '天治':1124,'大治':1126,'天承':1131,'長承':1132,'保延':1135,'永治':1141,'康治':1142,'天養':1144,
+  '久安':1145,'仁平':1151,'久寿':1154,'保元':1156,'平治':1159,'永暦':1160,'応保':1161,'長寛':1163,
+  '永万':1165,'仁安':1166,'嘉応':1169,'承安':1171,'安元':1175,'治承':1177,'養和':1181,'寿永':1182,
+  '元暦':1184,'文治':1185,'建久':1190,'正治':1199,'建仁':1201,'元久':1204,'建永':1206,'承元':1207,
+  '建暦':1211,'建保':1213,'承久':1219,
+  '暦応':1338,'康永':1342,'貞和':1345,'観応':1350,'文和':1352,'延文':1356,'康安':1361,'貞治':1362,
+  '応安':1368,'永和':1375,'康暦':1379,'永徳':1381,'至徳':1384,'嘉慶':1387,'康応':1389,'明徳':1390,
+  '応永':1394,'正長':1428,'永享':1429,'嘉吉':1441,'文安':1444,'宝徳':1449,'享徳':1452,'康正':1455,
+  '長禄':1457,'寛正':1460,'文正':1466,'応仁':1467,'文明':1469,'長享':1487,'延徳':1489,'明応':1492,
+  '文亀':1501,'永正':1504,'大永':1521,'享禄':1528,'天文':1532,'弘治':1555,'永禄':1558,'元亀':1570,
+  '天正':1573,'文禄':1593,'慶長':1596,'元和':1615,'寛永':1624,'正保':1645,'慶安':1648,'承応':1652,
+  '明暦':1655,'万治':1658,'寛文':1661,'延宝':1673,'天和':1681,'貞享':1684,'元禄':1688,'宝永':1704,
+  '正徳':1711,'享保':1716,'元文':1736,'寛保':1741,'延享':1744,'寛延':1748,'宝暦':1751,'明和':1764,
+  '安永':1772,'天明':1781,'寛政':1789,'享和':1801,'文化':1804,'文政':1818,'天保':1830,'弘化':1844,
+  '嘉永':1848,'安政':1854,'万延':1860,'文久':1861,'元治':1864,'慶応':1865
+};
+Object.keys(ERA_TABLE_EXTRA).forEach(k=>{ if(!(k in ERA_TABLE)) ERA_TABLE[k] = ERA_TABLE_EXTRA[k]; });
 ERA_NAMES_SORTED.length=0; Object.keys(ERA_TABLE).sort((a,b)=>b.length-a.length).forEach(e=>ERA_NAMES_SORTED.push(e));
+
+/* ------------------------------------------------------------
+   西暦・仏紀・和暦の相互計算（年単位）
+   仏紀＝西暦＋949（仏滅後。このアプリの従来どおり）。西暦＝仏紀−949。
+   ------------------------------------------------------------ */
+function seirekiFromButsuki(b){ return (b===null||b===undefined||isNaN(b))? null : b-949; }
+
+// 西暦年 → {era, waYear, alt}。大宝元年（701）より前は null。
+// alt は、その年に改元があった場合の「改元前の元号」（例：1264年 → 文永元年／alt=弘長4年）。
+function warekiFromSeireki(y){
+  y = Number(y);
+  if(!isFinite(y)) return null;
+  const list = Object.keys(ERA_TABLE).map(n=>({era:n, start:ERA_TABLE[n]})).sort((a,b)=>a.start-b.start);
+  let idx = -1;
+  for(let i=0;i<list.length;i++){ if(list[i].start<=y) idx=i; else break; }
+  if(idx<0) return null;
+  const cur = list[idx];
+  const out = {era:cur.era, waYear:y-cur.start+1, alt:null};
+  if(cur.start===y && idx>0){ const pv = list[idx-1]; out.alt = {era:pv.era, waYear:y-pv.start+1}; }
+  return out;
+}
+function warekiYearLabel(era, waYear){ return era + (waYear===1? '元' : waYear) + '年'; }
+
+// 年の説明文（フォームの案内表示用）例：「西暦1253年＝仏紀2202年＝建長5年」
+function describeYearAll(y){
+  if(y===null||y===undefined||isNaN(y)) return '';
+  const w = warekiFromSeireki(y);
+  let t = '西暦'+y+'年＝仏紀'+butsukiFromSeireki(y)+'年';
+  if(w){
+    t += '＝'+warekiYearLabel(w.era, w.waYear);
+    if(w.alt) t += '（この年に改元があり、改元前は'+warekiYearLabel(w.alt.era, w.alt.waYear)+'。新しい元号で表示）';
+  } else {
+    t += '（大宝元年〔701年〕より前のため、和暦はありません）';
+  }
+  return t;
+}
 
 /* ============================================================
    保存アーキテクチャ（v3）：文書ごとの個別キー化＋デバウンス＋遅延読み込み
@@ -415,6 +493,7 @@ async function persistIndexNow(){
     relationTagsMaster: STATE.relationTagsMaster,
     goshoMaster: STATE.goshoMaster,
     mergedGoshos: STATE.mergedGoshos,
+    citations: STATE.citations,
     eraRanges: STATE.eraRanges
   };
   await storageSet(INDEX_KEY, JSON.stringify(payload));
@@ -450,8 +529,9 @@ let STATE = {
   goshoEdit: {query:'', expandedIds:null},
   crossSearch: {query:'', tab:'all'},
   relationTagsMaster: ['門下僧','門下在家','邪宗僧','鎌倉幕府'],
-  goshoMaster: [], // {id, name, era, waYear, month, day, recipient, author, note} の配列
+  goshoMaster: [], // {id, name, kind(gosho/nikko/shoshi/sutra/ronshaku/bunsho_sho/bunsho_matsu/other), aliases[], era, waYear, month, day, recipient, author, note} の配列
   mergedGoshos: [],
+  citations: [], // 解説書から取り込んだ御文（引用）の断片 {id, goshoId, sourceName, category, text, status:'ok'|'hold', book, chapter, section, batch, createdAt}
   mergeSelectedGoshoId: '',
   mergeCompare: null, // {leftBlockId, rightBlockId, preset, editedManually} 統合比較モーダルの状態
   mergeSelectedFragmentIds: []
@@ -461,6 +541,9 @@ function personSeireki(p, which){
   const era = which==='birth'? p.birthEra : p.deathEra;
   const wy = which==='birth'? p.birthWaYear : p.deathWaYear;
   if(era && wy!==null && wy!==undefined) return seirekiFromWareki(era, wy);
+  // 和暦に当てはまらない年（大宝より前など）は、西暦で直接入力した値を使う
+  const fy = which==='birth'? p.birthSeireki : p.deathSeireki;
+  if(fy!==null && fy!==undefined && fy!=='' && !isNaN(fy)) return Number(fy);
   return null;
 }
 
@@ -748,20 +831,22 @@ function renderPersonTable(){
           <div class="flex flex-wrap gap-1 mb-1">${buildEraChipsHtml('birth'+idx, p.birthEra)}</div>
           <div class="grid grid-cols-4 gap-1">
             <select class="field-select" onchange="updatePerson(${idx},'birthEra',this.value||null); renderPersonTable();">${buildEraSelectOptions(p.birthEra)}</select>
-            <select class="field-select" onchange="updatePerson(${idx},'birthWaYear',this.value?parseInt(this.value):null)">${buildYearSelectOptions(p.birthWaYear)}</select>
+            <select class="field-select" onchange="updatePerson(${idx},'birthWaYear',this.value?parseInt(this.value):null); renderPersonTable();">${buildYearSelectOptions(p.birthWaYear)}</select>
             <select class="field-select" onchange="updatePerson(${idx},'birthMonth',this.value?parseInt(this.value):null)">${buildMonthSelectOptions(p.birthMonth)}</select>
             <select class="field-select" onchange="updatePerson(${idx},'birthDay',this.value?parseInt(this.value):null)">${buildDaySelectOptions(p.birthDay)}</select>
           </div>
+          ${buildPersonYearInputs(idx, p, 'birth')}
         </div>
         <div>
           <label class="field-label">没年月日</label>
           <div class="flex flex-wrap gap-1 mb-1">${buildEraChipsHtml('death'+idx, p.deathEra)}</div>
           <div class="grid grid-cols-4 gap-1">
             <select class="field-select" onchange="updatePerson(${idx},'deathEra',this.value||null); renderPersonTable();">${buildEraSelectOptions(p.deathEra)}</select>
-            <select class="field-select" onchange="updatePerson(${idx},'deathWaYear',this.value?parseInt(this.value):null)">${buildYearSelectOptions(p.deathWaYear)}</select>
+            <select class="field-select" onchange="updatePerson(${idx},'deathWaYear',this.value?parseInt(this.value):null); renderPersonTable();">${buildYearSelectOptions(p.deathWaYear)}</select>
             <select class="field-select" onchange="updatePerson(${idx},'deathMonth',this.value?parseInt(this.value):null)">${buildMonthSelectOptions(p.deathMonth)}</select>
             <select class="field-select" onchange="updatePerson(${idx},'deathDay',this.value?parseInt(this.value):null)">${buildDaySelectOptions(p.deathDay)}</select>
           </div>
+          ${buildPersonYearInputs(idx, p, 'death')}
         </div>
         <div>
           <label class="field-label">没表現・年齢</label>
@@ -802,7 +887,50 @@ function togglePersonTag(idx, key, tag){
   updatePerson(idx, key, list);
   renderPersonTable();
 }
-function updatePerson(idx, key, val){ STATE.persons[idx][key]=val; persistAll(); }
+function updatePerson(idx, key, val){
+  STATE.persons[idx][key]=val;
+  // 和暦（元号・年）を選んだら、西暦の直接入力値は不要になるので消す（和暦から計算される）
+  const m = /^(birth|death)(Era|WaYear)$/.exec(key);
+  if(m && val!==null && val!==undefined && val!=='') STATE.persons[idx][m[1]+'Seireki'] = null;
+  persistAll();
+}
+
+/* 人物の生年・没年：西暦／仏紀で入力すると、和暦（元号・年）を計算して当てはめる。
+   月・日はそのまま残す。和暦に当てはまらない年（大宝より前）は、西暦のまま保存する。 */
+function buildPersonYearInputs(idx, p, which){
+  const y = personSeireki(p, which);
+  const sVal = (y===null||y===undefined)? '' : y;
+  const bVal = (y===null||y===undefined)? '' : butsukiFromSeireki(y);
+  let hint = '';
+  if(y!==null && y!==undefined){
+    const w = warekiFromSeireki(y);
+    const era = which==='birth'? p.birthEra : p.deathEra;
+    if(!w) hint = '和暦なし（大宝元年〔701年〕より前）。西暦で保存されます';
+    else if(w.alt && era===w.era) hint = 'この年は改元の年です（改元前：'+warekiYearLabel(w.alt.era, w.alt.waYear)+'）';
+  }
+  return `<div class="grid grid-cols-2 gap-1 mt-1">
+    <label class="text-xs text-gray-500">西暦（和暦がわからない時はこちらへ）
+      <input type="number" class="field-input mt-0.5" placeholder="例：1222" value="${sVal}" onchange="onPersonYearInput(${idx},'${which}','seireki',this.value)">
+    </label>
+    <label class="text-xs text-gray-500">仏紀（仏滅後）
+      <input type="number" class="field-input mt-0.5" placeholder="例：2171" value="${bVal}" onchange="onPersonYearInput(${idx},'${which}','butsuki',this.value)">
+    </label>
+  </div>${hint? `<p class="text-xs mt-1" style="color:var(--gray)">${escapeHtml(hint)}</p>`:''}`;
+}
+function onPersonYearInput(idx, which, kind, val){
+  const p = STATE.persons[idx];
+  const t = toHalfWidthDigits(String(val||'')).trim();
+  if(t===''){ renderPersonTable(); return; }   // 空欄にしても既存の値は消さない（誤操作防止）
+  let y = parseInt(t,10);
+  if(isNaN(y) || y===0){ alert('年は数字で入力してください（0年はありません）'); renderPersonTable(); return; }
+  if(kind==='butsuki') y = seirekiFromButsuki(y);
+  const w = warekiFromSeireki(y);
+  if(w){ p[which+'Era']=w.era; p[which+'WaYear']=w.waYear; p[which+'Seireki']=null; }
+  else { p[which+'Era']=null; p[which+'WaYear']=null; p[which+'Seireki']=y; }
+  persistAll();
+  renderPersonTable();
+  if(typeof renderTimeline==='function') renderTimeline();
+}
 function addPerson(){
   STATE.persons.push({id:uid(), name:'新規人物', reading:'', alias:'', ageMethod:'kazoe', deathLabel:'',
     birthEra:null, birthWaYear:null, birthMonth:null, birthDay:null,
@@ -896,7 +1024,7 @@ function renderGoshoNameMaster(){
   // 元の配列インデックス（元号チップのnamespaceが重複しないよう）を保ったまま絞り込む
   let entries = STATE.goshoMaster.map((rec,idx)=>({rec, idx}));
   const q = (STATE.goshoEdit.query||'').trim().toLowerCase();
-  if(q) entries = entries.filter(e=> (e.rec.name+' '+(e.rec.recipient||'')+' '+(e.rec.author||'')+' '+(e.rec.note||'')).toLowerCase().includes(q));
+  if(q) entries = entries.filter(e=> (goshoNamesOf(e.rec).join(' ')+' '+(e.rec.recipient||'')+' '+(e.rec.author||'')+' '+(e.rec.note||'')).toLowerCase().includes(q));
 
   const countEl = document.getElementById('goshoEditCount');
   if(countEl) countEl.textContent = `${entries.length}件 / 全${STATE.goshoMaster.length}件`;
@@ -913,8 +1041,10 @@ function renderGoshoNameMaster(){
         <div class="flex items-center gap-2 flex-wrap">
           <i class="fa-solid fa-chevron-right text-xs" style="color:var(--gray)"></i>
           <span class="font-semibold text-sm">${escapeHtml(goshoRecordLabel(rec))}</span>
+          ${goshoKindOf(rec)!=='gosho'? `<span class="chip" style="background:var(--gold-soft)">${GOSHO_KIND_LABEL[goshoKindOf(rec)]}</span>`:''}
           ${rec.recipient? `<span class="chip">宛：${escapeHtml(rec.recipient)}</span>`:''}
           ${rec.author? `<span class="chip">${escapeHtml(rec.author)}</span>`:''}
+          ${(rec.aliases&&rec.aliases.length)? `<span class="text-xs text-gray-400">別名：${escapeHtml(rec.aliases.join('・'))}</span>`:''}
         </div>
       </div>`;
     }
@@ -929,6 +1059,18 @@ function renderGoshoNameMaster(){
         <input class="field-input sm:col-span-2" placeholder="御書名（例：四条金吾殿御返事）" value="${escapeHtml(rec.name||'')}" onchange="updateGoshoRecord('${rec.id}','name',this.value)">
         <input class="field-input" placeholder="宛先・対告衆（例：四条金吾）" value="${escapeHtml(rec.recipient||'')}" onchange="updateGoshoRecord('${rec.id}','recipient',this.value)">
         <input class="field-input" placeholder="説いた人（例：日蓮大聖人）" value="${escapeHtml(rec.author||'')}" onchange="updateGoshoRecord('${rec.id}','author',this.value)">
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
+        <div>
+          <label class="field-label">種類</label>
+          <select class="field-select" onchange="updateGoshoRecord('${rec.id}','kind',this.value); renderGoshoNameMaster();">
+            ${Object.keys(GOSHO_KIND_LABEL).map(k=>`<option value="${k}" ${goshoKindOf(rec)===k?'selected':''}>${GOSHO_KIND_LABEL[k]}</option>`).join('')}
+          </select>
+        </div>
+        <div class="col-span-2 sm:col-span-3">
+          <label class="field-label">別名（「、」区切り。解説書などでの別の呼び名。例：成道御書、下種本仏成道抄）</label>
+          <input class="field-input" placeholder="別名を入力" value="${escapeHtml((rec.aliases||[]).join('、'))}" onchange="updateGoshoAliases('${rec.id}',this.value)">
+        </div>
       </div>
       <div class="grid grid-cols-2 sm:grid-cols-6 gap-2 items-end">
         <div class="col-span-2 sm:col-span-4">
@@ -955,10 +1097,18 @@ function updateGoshoRecord(id, key, val){
   rec[key] = val;
   persistAll();
 }
+function updateGoshoAliases(id, val){
+  const rec = goshoRecordById(id);
+  if(!rec) return;
+  const list = String(val||'').split(/[、,，\n]/).map(x=>x.trim()).filter(x=>x && x!==rec.name);
+  rec.aliases = [...new Set(list)];
+  persistAll();
+  renderGoshoNameMaster();
+}
 function addGoshoNameMaster(name){
   const val = (name!==undefined? name : (document.getElementById('newGoshoNameInput')||{}).value || '').trim();
   if(!val) return null;
-  const rec = {id: uid(), name: val, era:null, waYear:null, month:null, day:null, recipient:'', author:'', note:''};
+  const rec = {id: uid(), name: val, kind:'gosho', aliases:[], era:null, waYear:null, month:null, day:null, recipient:'', author:'', note:''};
   STATE.goshoMaster.push(rec);
   const input = document.getElementById('newGoshoNameInput');
   if(input && name===undefined) input.value = '';
@@ -972,6 +1122,7 @@ function removeGoshoNameMaster(id){
   requestDelete(goshoRecordLabel(rec), ()=>{
     STATE.goshoMaster = STATE.goshoMaster.filter(g=>g.id!==id);
     STATE.documents.forEach(d=>{ if(d.goshoId===id) d.goshoId=''; });
+    (STATE.citations||[]).forEach(c=>{ if(c.goshoId===id){ c.goshoId=''; c.status='hold'; } });   // 取り込んだ御文は消さず、保留に戻す
     persistAll();
     renderGoshoNameMaster();
   });
@@ -988,11 +1139,73 @@ function matchGoshoRecord(title){
 function matchGoshoRecordObj(title){
   if(!title) return null;
   const t = title.trim();
-  const candidates = STATE.goshoMaster.filter(g=> g.name && (t.includes(g.name) || g.name.includes(t)));
-  if(candidates.length===1) return candidates[0];
-  const exact = candidates.filter(g=>g.name===t);
+  // 別名（aliases）も御書名として扱う。完全一致を最優先し、次に部分一致で推定する
+  const exact = STATE.goshoMaster.filter(g=> goshoNamesOf(g).includes(t));
   if(exact.length===1) return exact[0];
+  const candidates = STATE.goshoMaster.filter(g=> goshoNamesOf(g).some((n,k)=> (k===0 || n.length>=3) && (t.includes(n) || n.includes(t))));
+  if(candidates.length===1) return candidates[0];
   return null;
+}
+// 御書マスターの1件が持つ名前（正式名＋別名）の一覧
+function goshoNamesOf(rec){
+  if(!rec) return [];
+  return [rec.name].concat(Array.isArray(rec.aliases)? rec.aliases : []).map(x=>String(x||'').trim()).filter(Boolean);
+}
+// 御書マスターの種類：御書／日寛上人の文段・御指南／経文・論釈／御本尊（未設定は御書）
+// 御書マスターの「種類」。御文の取り込み先を分けるためのもの。
+const GOSHO_KIND_LABEL = {
+  gosho:'御書', nikko:'日興上人・日目上人', nichikan:'日寛上人', shoshi:'正師御文', sutra:'経文', ronshaku:'論釈',
+  bunsho_sho:'文証(邪義/正像)', bunsho_matsu:'文証(邪義/末法)', other:'他'
+};
+// 以前の版の名前 → 現在の名前（以前の版で保存したデータを、読み込み時に自動で移し替える）
+const GOSHO_KIND_LEGACY = {nikkan:'nichikan', honzon:'gosho'};
+function migrateKindNames(){
+  let changed = false;
+  const isNichikanName = n => /文段$/.test(n||'') || (typeof QX_NIKKAN_NAMES!=='undefined' && QX_NIKKAN_NAMES.includes(n));
+  (STATE.goshoMaster||[]).forEach(g=>{
+    if(!g) return;
+    if(GOSHO_KIND_LEGACY[g.kind]){ g.kind = GOSHO_KIND_LEGACY[g.kind]; changed = true; }
+    // 前の版で「正師御文」に入っていた日寛上人の文段・御指南は「日寛上人」へ、御本尊は「御書」へ
+    if(g.kind==='shoshi' && (g.author==='日寛上人' || isNichikanName(g.name))){ g.kind = 'nichikan'; changed = true; }
+    if(g.kind==='other' && /御本尊$/.test(g.name||'')){ g.kind = 'gosho'; changed = true; }
+  });
+  (STATE.citations||[]).forEach(c=>{
+    if(!c) return;
+    if(GOSHO_KIND_LEGACY[c.category]){ c.category = GOSHO_KIND_LEGACY[c.category]; changed = true; }
+    if(c.category==='shoshi' && isNichikanName(c.sourceName)){ c.category = 'nichikan'; changed = true; }
+    if(c.category==='other' && /御本尊$/.test(c.sourceName||'')){ c.category = 'gosho'; changed = true; }
+  });
+  return changed;
+}
+
+// 「文証(邪義/末法)」に、あらかじめ入れておく4名。人物名のマスターとして作り、
+// 呼び方の違い（日顕・阿部信雄など）は別名として登録しておく。すでにある名前は作らない。
+const HERESY_MATSU_SEED = [
+  {name:'池田大作', aliases:['池田']},
+  {name:'細井日達', aliases:['日達']},
+  {name:'阿部日顕(信雄)', aliases:['阿部日顕','阿部信雄','日顕','阿部日顕（信雄）']},
+  {name:'早瀬日如', aliases:['日如']}
+];
+const HERESY_SEED_FLAG = 'gosho_seed_bunsho_matsu_v1';
+function ensureHeresyMasters(){
+  try{ if(localStorage.getItem(HERESY_SEED_FLAG)==='1') return false; }catch(e){}
+  let added = false;
+  HERESY_MATSU_SEED.forEach(seed=>{
+    const all = [seed.name].concat(seed.aliases);
+    const exists = STATE.goshoMaster.some(g=> goshoNamesOf(g).some(n=> all.includes(n)));
+    if(exists) return;
+    STATE.goshoMaster.push({id:uid(), name:seed.name, kind:'bunsho_matsu', aliases:seed.aliases.slice(),
+      era:null, waYear:null, month:null, day:null, recipient:'', author:'', note:''});
+    added = true;
+  });
+  try{ localStorage.setItem(HERESY_SEED_FLAG,'1'); }catch(e){}
+  return added;
+}
+
+function goshoKindOf(rec){
+  if(!rec) return 'gosho';
+  if(GOSHO_KIND_LABEL[rec.kind]) return rec.kind;
+  return GOSHO_KIND_LEGACY[rec.kind] || 'gosho';
 }
 
 // ------------------------------------------------------------
@@ -1137,7 +1350,7 @@ function collectSyncPayload(){
   return {
     documents: STATE.documents, events: STATE.events, persons: STATE.persons, settings: STATE.settings,
     relationTagsMaster: STATE.relationTagsMaster, goshoMaster: STATE.goshoMaster,
-    mergedGoshos: STATE.mergedGoshos, eraRanges: STATE.eraRanges,
+    mergedGoshos: STATE.mergedGoshos, citations: STATE.citations, eraRanges: STATE.eraRanges,
     exportedAt: new Date().toISOString()
   };
 }
@@ -1158,6 +1371,8 @@ function applySyncPayload(payload){
   if(Array.isArray(payload.relationTagsMaster) && payload.relationTagsMaster.length) STATE.relationTagsMaster = payload.relationTagsMaster;
   if(Array.isArray(payload.goshoMaster)) STATE.goshoMaster = payload.goshoMaster;
   if(Array.isArray(payload.mergedGoshos)) STATE.mergedGoshos = payload.mergedGoshos;
+  if(Array.isArray(payload.citations)) STATE.citations = payload.citations;
+  migrateKindNames();
   if(Array.isArray(payload.eraRanges)) STATE.eraRanges = payload.eraRanges;
   migrateGoshoMasterToRecords();
   persistAll();
@@ -1165,6 +1380,8 @@ function applySyncPayload(payload){
   renderRelationTagMaster();
   renderGoshoNameMaster();
   renderEraRangeMaster();
+  if(typeof invalidateRubyDict==='function') invalidateRubyDict();
+  if(typeof renderRubyDictEditor==='function') renderRubyDictEditor();
   renderDocList();
   renderPersonTable();
   renderTimeline();
@@ -1221,6 +1438,7 @@ function loadSyncConfigIntoForm(){
   document.getElementById('sync_token').value = cfg.token || '';
   document.getElementById('sync_gistid').value = cfg.gistId || '';
   if(document.getElementById('pub_gistid')) document.getElementById('pub_gistid').value = cfg.pubGistId || '';
+  if(typeof refreshSaveButtonLabel==='function') refreshSaveButtonLabel();
 }
 const GIST_FILENAME = 'gosho_app_data.json';
 const PUB_GIST_FILENAME = 'kakiokoshi_viewer_data.json'; // 閲覧専用ビューアが読みに行く公開用ファイル名
@@ -1244,11 +1462,56 @@ async function gistCreate(){
     const data = await res.json();
     document.getElementById('sync_gistid').value = data.id;
     saveSyncConfig();
+    try{ const raw = data.files && data.files[GIST_FILENAME]; const m = raw && /"exportedAt"\s*:\s*"([^"]+)"/.exec(raw.content||''); if(m) setLastSyncMark(m[1]); }catch(e){}
     status.innerHTML = '<span style="color:#2f9e6f">作成しました。このGist ID「'+escapeHtml(data.id)+'」を他の端末にも同じように入力してください。</span>';
   }catch(err){
     status.innerHTML = '<span style="color:#c1473f">'+escapeHtml(err.message)+'</span>';
   }
 }
+
+/* ---- Gistへの書き込みの共通部分 ---- */
+function gistHttpErrorMessage(status){
+  if(status===401) return 'トークンが無効か、期限切れです（HTTP 401）';
+  if(status===403 || status===429) return '権限が足りないか、GitHubの回数制限です（HTTP '+status+'）。しばらく待つか、トークンのgist権限をご確認ください';
+  if(status===404) return 'Gistが見つかりません（HTTP 404）。Gist IDと、トークンの持ち主をご確認ください';
+  if(status===422) return '内容が受け付けられませんでした（HTTP 422）。データが大きすぎる可能性があります';
+  return '失敗しました（HTTP '+status+'）';
+}
+// 1つのGistの1ファイルを書き換える。失敗したときは理由つきのErrorを投げる
+async function gistPatch(gistId, token, filename, content){
+  let res;
+  try{
+    res = await fetch('https://api.github.com/gists/'+encodeURIComponent(gistId), {
+      method: 'PATCH',
+      headers: { 'Authorization': 'token '+token, 'Accept': 'application/vnd.github+json' },
+      body: JSON.stringify({ files: { [filename]: { content } } })
+    });
+  }catch(e){
+    throw new Error('通信に失敗しました。回線の状態をご確認ください');
+  }
+  if(!res.ok) throw new Error(gistHttpErrorMessage(res.status));
+  return res;
+}
+// Gist上のファイルから「exportedAt」だけを取り出す（古い端末での上書きの検知用）。取れなければ null
+async function gistFetchExportedAt(gistId, token, filename){
+  try{
+    const res = await fetch('https://api.github.com/gists/'+encodeURIComponent(gistId), {
+      headers: { 'Authorization': 'token '+token, 'Accept': 'application/vnd.github+json' }
+    });
+    if(!res.ok) return null;
+    const data = await res.json();
+    const file = data.files && data.files[filename];
+    if(!file) return null;
+    const text = file.truncated ? await (await fetch(file.raw_url)).text() : file.content;
+    const m = /"exportedAt"\s*:\s*"([^"]+)"/.exec(text||'');
+    return m? m[1] : null;
+  }catch(e){ return null; }
+}
+
+// 「この端末が最後にクラウドと同期した時点」の印（保存した／読み込んだ内容の exportedAt）
+const LAST_SYNC_KEY = 'gosho_last_sync_exported_at';
+function getLastSyncMark(){ try{ return localStorage.getItem(LAST_SYNC_KEY)||''; }catch(e){ return ''; } }
+function setLastSyncMark(v){ try{ if(v) localStorage.setItem(LAST_SYNC_KEY, v); }catch(e){} }
 
 async function gistSaveUi(){
   const status = document.getElementById('syncStatus');
@@ -1257,16 +1520,107 @@ async function gistSaveUi(){
   if(!cfg.token || !cfg.gistId){ status.innerHTML = '<span style="color:#c1473f">トークンとGist IDの両方を入力してください</span>'; return; }
   status.textContent = 'クラウドへ保存中…';
   try{
-    const res = await fetch('https://api.github.com/gists/'+encodeURIComponent(cfg.gistId), {
-      method: 'PATCH',
-      headers: { 'Authorization': 'token '+cfg.token, 'Accept': 'application/vnd.github+json' },
-      body: JSON.stringify({ files: { [GIST_FILENAME]: { content: JSON.stringify(await collectSyncPayloadFull(), null, 2) } } })
-    });
-    if(!res.ok) throw new Error('保存に失敗しました（HTTP '+res.status+'）');
+    const payload = await collectSyncPayloadFull();
+    await gistPatch(cfg.gistId, cfg.token, GIST_FILENAME, JSON.stringify(payload, null, 2));
+    setLastSyncMark(payload.exportedAt);
     status.innerHTML = '<span style="color:#2f9e6f"><i class="fa-solid fa-circle-check"></i> クラウドへ保存しました</span>';
   }catch(err){
     status.innerHTML = '<span style="color:#c1473f">'+escapeHtml(err.message)+'</span>';
   }
+}
+
+/* ---- 保存と公開の統合ボタン ----
+   ペイロードは1回だけ作り、非公開Gist → 公開Gist の順に同じ内容を書く。結果は別々に表示する。
+   ・「公開ビューアにも反映する」チェック（既定ON。端末に記憶）。OFFなら非公開Gistへの保存だけ。
+   ・公開用Gist IDが未設定なら公開はスキップし、案内を出す（公開Gistを自動では作らない）。
+   ・初めて公開も一緒に行う時だけ、確認ダイアログを1回出す。
+   ・クラウド側が、この端末の最後の同期より新しい場合は、上書き前に警告する。 */
+const ALSO_PUBLISH_KEY = 'gosho_save_also_publish';
+const PUBLISH_CONFIRMED_KEY = 'gosho_publish_confirmed';
+function getAlsoPublish(){
+  try{ const v = localStorage.getItem(ALSO_PUBLISH_KEY); return v===null? true : v==='1'; }catch(e){ return true; }
+}
+function setAlsoPublish(on){
+  try{ localStorage.setItem(ALSO_PUBLISH_KEY, on? '1':'0'); }catch(e){}
+  refreshSaveButtonLabel();
+}
+function refreshSaveButtonLabel(){
+  const cb = document.getElementById('sync_alsoPublish');
+  if(cb) cb.checked = getAlsoPublish();
+  const btn = document.getElementById('saveAndPublishBtn');
+  if(btn) btn.innerHTML = getAlsoPublish()
+    ? '<i class="fa-solid fa-cloud-arrow-up"></i>保存して公開ビューアにも反映'
+    : '<i class="fa-solid fa-cloud-arrow-up"></i>クラウドへ保存';
+}
+
+async function gistSaveAndPublish(){
+  const status = document.getElementById('syncStatus');
+  saveSyncConfig();
+  const token = document.getElementById('sync_token').value.trim();
+  const gistId = document.getElementById('sync_gistid').value.trim();
+  const pubEl = document.getElementById('pub_gistid');
+  const pubId = pubEl? pubEl.value.trim() : '';
+  const also = getAlsoPublish();
+  if(!token || !gistId){ status.innerHTML = '<span style="color:#c1473f">トークンとGist IDの両方を入力してください</span>'; return; }
+
+  // 初めて「保存と同時に公開」する時だけ確認（以後は聞かない）
+  if(also && pubId){
+    let confirmed = false;
+    try{ confirmed = localStorage.getItem(PUBLISH_CONFIRMED_KEY)==='1'; }catch(e){}
+    if(!confirmed){
+      const ok = confirm('【確認】これからは、保存のたびに公開ビューアにも同じ内容が反映されます。\n\n'
+        + '・試しに取り込んだ内容、未確認のAI解説、人物のメモなども公開されます。\n'
+        + '・公開用Gistは、URLやIDを知っている人なら誰でも読めます。\n'
+        + '・公開したくない時は、「公開ビューアにも反映する」のチェックを外して保存してください。\n\n'
+        + 'このまま、保存と公開を行いますか？（キャンセル＝何もしません）');
+      if(!ok){ status.innerHTML = '<span style="color:#888">キャンセルしました（何も保存していません）</span>'; return; }
+      try{ localStorage.setItem(PUBLISH_CONFIRMED_KEY, '1'); }catch(e){}
+    }
+  }
+
+  // 古い端末での上書きの警告
+  status.textContent = 'クラウドの状態を確認中…';
+  const cloudAt = await gistFetchExportedAt(gistId, token, GIST_FILENAME);
+  const mark = getLastSyncMark();
+  if(cloudAt && (!mark || new Date(cloudAt) > new Date(mark))){
+    const when = new Date(cloudAt).toLocaleString('ja-JP');
+    const msg = mark
+      ? 'クラウドの内容（'+when+' 保存）は、この端末が最後に同期した後に、別の端末で更新されています。\n\nこのまま保存すると、そちらの更新が消えます'+(also&&pubId?'（公開ビューアも同じ内容に置き換わります）':'')+'。\n\n本当に保存しますか？'
+      : 'この端末は、まだクラウドと同期した記録がありません。クラウドには別の内容（'+when+' 保存）があります。\n\nこのまま保存すると、クラウドの内容がこの端末の内容に置き換わります'+(also&&pubId?'（公開ビューアも同様です）':'')+'。\n\n本当に保存しますか？（先に「クラウドから読込」をおすすめします）';
+    if(!confirm(msg)){ status.innerHTML = '<span style="color:#888">キャンセルしました（何も保存していません）</span>'; return; }
+  }
+
+  status.textContent = '保存中…';
+  let payload, content;
+  try{
+    payload = await collectSyncPayloadFull();
+    content = JSON.stringify(payload, null, 2);   // 1回だけ作り、両方に同じ内容を送る
+  }catch(err){
+    status.innerHTML = '<span style="color:#c1473f">データの準備に失敗しました：'+escapeHtml(err.message)+'</span>'; return;
+  }
+  const kb = Math.round(content.length/1024);
+  const lines = [];
+  try{
+    await gistPatch(gistId, token, GIST_FILENAME, content);
+    setLastSyncMark(payload.exportedAt);
+    lines.push('<span style="color:#2f9e6f"><i class="fa-solid fa-circle-check"></i> クラウドへ保存しました（約'+kb+'KB）</span>');
+  }catch(err){
+    lines.push('<span style="color:#c1473f"><i class="fa-solid fa-circle-xmark"></i> クラウドへの保存に失敗：'+escapeHtml(err.message)+'</span>');
+  }
+  if(also){
+    if(!pubId){
+      lines.push('<span style="color:#b8860b"><i class="fa-solid fa-circle-info"></i> 公開は行いませんでした：公開用Gist IDが未設定です。下の「公開ビューアへの反映」で「初めて公開する」を押してください。</span>');
+    } else {
+      status.innerHTML = lines.join('<br>') + '<br>公開ビューアへ反映中…';
+      try{
+        await gistPatch(pubId, token, PUB_GIST_FILENAME, content);
+        lines.push('<span style="color:#2f9e6f"><i class="fa-solid fa-circle-check"></i> 公開ビューアに反映しました</span>');
+      }catch(err){
+        lines.push('<span style="color:#c1473f"><i class="fa-solid fa-circle-xmark"></i> 公開ビューアへの反映に失敗：'+escapeHtml(err.message)+'</span>');
+      }
+    }
+  }
+  status.innerHTML = lines.join('<br>');
 }
 
 async function gistLoadUi(){
@@ -1284,8 +1638,9 @@ async function gistLoadUi(){
     const data = await res.json();
     const file = data.files && data.files[GIST_FILENAME];
     if(!file) throw new Error('Gist内にデータファイルが見つかりません');
-    const payload = JSON.parse(file.content);
+    const payload = JSON.parse(file.truncated ? await (await fetch(file.raw_url)).text() : file.content);
     applySyncPayload(payload);
+    setLastSyncMark(payload.exportedAt);
     status.innerHTML = '<span style="color:#2f9e6f"><i class="fa-solid fa-circle-check"></i> クラウドから読み込みました</span>';
   }catch(err){
     status.innerHTML = '<span style="color:#c1473f">'+escapeHtml(err.message)+'</span>';
@@ -1320,6 +1675,7 @@ async function pubGistCreate(){
   }
 }
 
+// （内部用）公開用Gistだけを更新する。画面のボタンは「保存して公開ビューアにも反映」に統合済み
 async function pubGistPublish(){
   const status = document.getElementById('pubSyncStatus');
   const token = document.getElementById('sync_token').value.trim();
@@ -1329,12 +1685,7 @@ async function pubGistPublish(){
   if(!gistId){ status.innerHTML = '<span style="color:#c1473f">先に「初めて公開する」を実行してください</span>'; return; }
   status.textContent = '公開用ビューアへ反映中…';
   try{
-    const res = await fetch('https://api.github.com/gists/'+encodeURIComponent(gistId), {
-      method: 'PATCH',
-      headers: { 'Authorization': 'token '+token, 'Accept': 'application/vnd.github+json' },
-      body: JSON.stringify({ files: { [PUB_GIST_FILENAME]: { content: JSON.stringify(await collectSyncPayloadFull(), null, 2) } } })
-    });
-    if(!res.ok) throw new Error('反映に失敗しました（HTTP '+res.status+'）');
+    await gistPatch(gistId, token, PUB_GIST_FILENAME, JSON.stringify(await collectSyncPayloadFull(), null, 2));
     status.innerHTML = '<span style="color:#2f9e6f"><i class="fa-solid fa-circle-check"></i> 公開ビューアに反映しました</span>';
   }catch(err){
     status.innerHTML = '<span style="color:#c1473f">'+escapeHtml(err.message)+'</span>';

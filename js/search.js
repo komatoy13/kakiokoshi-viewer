@@ -168,7 +168,7 @@ function goToSearchResult(type, id){
   if(type==='doc' || type==='lecture'){
     goToDoc(id);
   } else if(type==='event'){
-    switchTab('timeline');
+    switchTab('archive');
   } else if(type==='person'){
     switchTab('persons');
     openPersonDetail(id);

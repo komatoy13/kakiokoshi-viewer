@@ -50,10 +50,13 @@ async function bootViewer(){
 
     STATE.documents = data.documents || [];
     STATE.events = data.events || [];
+    STATE.settings = data.settings || {};   // ルビ範囲辞書（settings.rubyDict）を含む
     STATE.persons = (data.persons && data.persons.length) ? data.persons : DEFAULT_PERSONS;
     STATE.relationTagsMaster = data.relationTagsMaster || STATE.relationTagsMaster;
     STATE.goshoMaster = data.goshoMaster || [];
     STATE.mergedGoshos = data.mergedGoshos || [];
+    STATE.citations = Array.isArray(data.citations) ? data.citations : [];
+    if(typeof migrateKindNames==='function') migrateKindNames();
     STATE.eraRanges = Array.isArray(data.eraRanges) ? data.eraRanges : null;
     // 公開データは既に本文まで全部含んでいるため、開いていない御書だけ本文が空になる問題を避けるよう、
     // 全件「読み込み済み」として扱う（そうしないとensureDocFullLoadedが本文を空で上書きしてしまう）
@@ -108,6 +111,7 @@ function switchTab(tabName){
   if(tabName==='archive') setKakiokoshiMode('timeline'); // 「書き起こし」タブは必ず年表モードから始まる
   if(tabName==='terms') renderTerms();
   if(tabName==='persons') renderPersonCards();
+  if(tabName==='mergedlist') renderMergedList();
   if(tabName==='search') renderSearchResults();
   if(!isWideScreen()) closeSidebar();
   window.scrollTo({top:0, behavior:'smooth'});

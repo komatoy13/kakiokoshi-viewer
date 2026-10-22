@@ -90,10 +90,59 @@ function onEvWarekiPickerChange(){
   const leapCb = document.getElementById('ev_waleap');
   document.getElementById('ev_wareki').value = composeWarekiText(era, year, month, day, !!(leapCb && leapCb.checked));
   refreshEraChipActive('ev_eraChips', era);
+  // 元号と年が揃っていれば、西暦・仏紀を自動で入れる（揃っていない間は、入力済みの西暦を残す）
+  if(era && year){
+    const y = seirekiFromWareki(era, parseInt(year,10));
+    if(y!==null){
+      document.getElementById('ev_syear').value = y;
+      document.getElementById('ev_butsuki').value = butsukiFromSeireki(y);
+      updateEvYearHint(y);
+    }
+  }
+}
+
+// 西暦から和暦のピッカー（元号・年）を当てはめる。月・日・閏月の選択はそのまま残す。
+function applyEvSeireki(y){
+  const hint = document.getElementById('ev_yearHint');
+  if(y===null || isNaN(y) || y===0){ if(hint) hint.textContent=''; return; }
+  document.getElementById('ev_syear').value = y;
+  document.getElementById('ev_butsuki').value = butsukiFromSeireki(y);
+  const w = warekiFromSeireki(y);
+  const month = document.getElementById('ev_wamonth').value;
+  const day = document.getElementById('ev_waday').value;
+  const leapCb = document.getElementById('ev_waleap');
+  const isLeap = !!(leapCb && leapCb.checked);
+  if(w){
+    initWarekiPickerEv(w.era, w.waYear, month, day, isLeap);
+    document.getElementById('ev_wareki').value = composeWarekiText(w.era, w.waYear, month, day, isLeap);
+  } else {
+    initWarekiPickerEv('', '', month, day, isLeap);
+    document.getElementById('ev_wareki').value = '';
+  }
+  updateEvYearHint(y);
+}
+function updateEvYearHint(y){
+  const hint = document.getElementById('ev_yearHint');
+  if(hint) hint.textContent = describeYearAll(y);
+}
+function onEvSeirekiInput(){
+  const t = toHalfWidthDigits(document.getElementById('ev_syear').value||'').trim();
+  if(t===''){ return; }   // 空欄にしても和暦側は消さない
+  applyEvSeireki(parseInt(t,10));
+}
+function onEvButsukiInput(){
+  const t = toHalfWidthDigits(document.getElementById('ev_butsuki').value||'').trim();
+  if(t===''){ return; }
+  const b = parseInt(t,10);
+  if(isNaN(b)){ return; }
+  applyEvSeireki(seirekiFromButsuki(b));
 }
 
 function resetEventForm(){
-  ['ev_wareki','ev_syear','ev_title','ev_desc'].forEach(id=>document.getElementById(id).value='');
+  ['ev_wareki','ev_syear','ev_butsuki','ev_title','ev_desc'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  updateEvYearHint(null);
+  const hintEl = document.getElementById('ev_yearHint');
+  if(hintEl) hintEl.textContent = '西暦か仏紀を入力すると、和暦を自動で当てはめます。和暦を選ぶと、西暦・仏紀が自動で入ります。';
   document.getElementById('ev_type').value = 'general';
   initWarekiPickerEv('','','','');
   populateEventRelatedDocSelect('');
@@ -114,6 +163,8 @@ function editEvent(id){
   initWarekiPickerEv(wk?wk.era:'', wk?wk.waYear:'', wk?wk.month:'', wk?wk.day:'', wk?wk.isLeapMonth:false);
   document.getElementById('ev_wareki').value = e.warekiText||'';
   document.getElementById('ev_syear').value = e.seirekiYear||'';
+  document.getElementById('ev_butsuki').value = e.seirekiYear? butsukiFromSeireki(e.seirekiYear) : '';
+  if(e.seirekiYear) updateEvYearHint(e.seirekiYear);
   document.getElementById('ev_title').value = e.title||'';
   document.getElementById('ev_person').value = e.person||'';
   document.getElementById('ev_type').value = e.eventType||'general';
@@ -128,8 +179,16 @@ function editEvent(id){
 function cancelEventEdit(){ resetEventForm(); }
 
 function saveManualEvent(){
-  const wareki = document.getElementById('ev_wareki').value.trim();
+  let wareki = document.getElementById('ev_wareki').value.trim();
   const syear = parseInt(document.getElementById('ev_syear').value)||null;
+  if(!wareki && syear){
+    const w = warekiFromSeireki(syear);
+    if(w){
+      const mo = document.getElementById('ev_wamonth').value, dy = document.getElementById('ev_waday').value;
+      const lp = document.getElementById('ev_waleap');
+      wareki = composeWarekiText(w.era, w.waYear, mo, dy, !!(lp && lp.checked));
+    }
+  }
   const title = document.getElementById('ev_title').value.trim();
   const person = document.getElementById('ev_person').value;
   const eventType = document.getElementById('ev_type').value || 'general';
@@ -504,6 +563,8 @@ async function openFullTextModal(docId){
   document.getElementById('fullTextModalBody').textContent = '読み込み中…';
   openModal('fullTextModal');
   await ensureDocFullLoaded(docId);
+  FULLTEXT_MODAL_CURRENT = {title: d.title||'（無題）', text: d.fullText || ''};
+  if(typeof syncRubyModeSelect==='function') syncRubyModeSelect();
   renderStructuredTextInto('fullTextModalBody', d.fullText || '（本文全文が登録されていません）');
   const pdfBtn = document.getElementById('fullTextModalPdfBtn');
   if(pdfBtn) pdfBtn.onclick = ()=> openPdfPreview(d.title||'（無題）', d.fullText||'');
