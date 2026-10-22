@@ -42,6 +42,7 @@
   <div class="tab-btn active" data-tab="archive"><i class="fa-solid fa-boxes-stacked"></i>書き起こし</div>
   <div class="tab-btn" data-tab="terms"><i class="fa-solid fa-book-open"></i>AI解説（用語辞典）</div>
   <div class="tab-btn" data-tab="persons"><i class="fa-solid fa-users"></i>人物データベース</div>
+  <div class="tab-btn" data-tab="mergedlist"><i class="fa-solid fa-layer-group"></i>結合した御書</div>
   <div class="tab-btn" data-tab="search"><i class="fa-solid fa-magnifying-glass"></i>横断検索</div>
 </nav>
 
@@ -117,6 +118,21 @@
       <div id="personCardGrid" class="person-card-grid"></div>
     </section>
 
+    <section id="view-mergedlist" class="view">
+      <div class="panel p-4 mb-4 space-y-3">
+        <p class="text-xs text-gray-400">御書ごとに、結合した文面と、元になった御文（講義録などの御文・解説書の御文）を見る画面です。結合していない御書は、取り込んだ御文を出所つきで順に開けます。</p>
+        <div class="relative">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+          <input type="text" id="mlSearch" class="field-input pl-8" placeholder="御書名・御文の言葉で絞り込み…" oninput="onMlSearch()">
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <select id="mlKind" class="field-select" style="width:auto" onchange="onMlFilter()"></select>
+          <select id="mlStatus" class="field-select" style="width:auto" onchange="onMlFilter()"></select>
+        </div>
+      </div>
+      <div id="mlList"></div>
+    </section>
+
     <!-- ============ VIEW: 横断検索 ============ -->
     <section id="view-search" class="view">
       <div class="panel p-4 mb-6 space-y-3">
@@ -147,7 +163,29 @@
   <div class="panel p-6 w-full max-w-2xl max-h-[85vh] flex flex-col">
     <h3 id="fullTextModalTitle" class="font-display text-lg mb-3 flex-shrink-0" style="color:var(--navy)"><i class="fa-solid fa-file-lines mr-2"></i></h3>
     <div id="fullTextModalBody" class="structured-text text-sm overflow-y-auto p-3 rounded-lg flex-1" style="background:var(--paper-dim); line-height:1.9"></div>
-    <div class="flex justify-end gap-2 mt-4 flex-shrink-0">
+    <div class="flex justify-end items-center gap-2 mt-4 flex-shrink-0 flex-wrap">
+      <div class="mr-auto flex items-center gap-x-3 gap-y-1 flex-wrap">
+        <label class="text-xs text-gray-500 flex items-center gap-1">ふりがな
+          <select id="rubyModeSelect" class="field-select text-xs" style="width:auto" onchange="setRubyMode(this.value)">
+            <option value="ruby">ルビ（漢字の上に小さく）</option>
+            <option value="paren">括弧書き（寂光(じゃっこう)）</option>
+          </select>
+        </label>
+        <label class="text-xs text-gray-500 flex items-center gap-1" title="PDFの書体。お使いの端末にある書体だけが使えます">PDFフォント
+          <select id="pdfFontSelect" class="field-select text-xs" style="width:auto" onchange="setPdfFont(this.value)">
+            <option value="mincho">明朝体（おすすめ）</option>
+            <option value="gothic">ゴシック体</option>
+            <option value="meiryo">Meiryo UI（Windows）</option>
+          </select>
+        </label>
+        <label class="text-xs text-gray-500 flex items-center gap-1">文字サイズ
+          <select id="pdfSizeSelect" class="field-select text-xs" style="width:auto" onchange="setPdfSize(this.value)">
+            <option value="9">9pt</option><option value="10">10pt</option><option value="10.5">10.5pt</option>
+            <option value="11">11pt（標準）</option><option value="12">12pt</option><option value="13">13pt</option>
+            <option value="14">14pt</option><option value="16">16pt</option><option value="18">18pt</option>
+          </select>
+        </label>
+      </div>
       <button id="fullTextModalPdfBtn" class="btn btn-gold"><i class="fa-solid fa-file-pdf"></i>PDF出力</button>
       <button class="btn btn-outline" onclick="closeModal('fullTextModal')">閉じる</button>
     </div>
@@ -221,6 +259,7 @@
 <script src="js/render.js"></script>
 <script src="js/ai-notes.js"></script>
 <script src="js/search.js"></script>
+<script src="js/merged-list.js"></script>
 <script src="js/viewer.js"></script>
 </body>
 </html>
