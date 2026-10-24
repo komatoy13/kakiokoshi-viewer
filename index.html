@@ -38,6 +38,8 @@
     <span class="font-display text-sm" style="color:var(--gold)">メニュー</span>
     <button class="sidebar-close" onclick="closeSidebar()" aria-label="メニューを閉じる"><i class="fa-solid fa-xmark"></i></button>
   </div>
+  <p class="sidebar-group-label">案内</p>
+  <div class="help-menu-btn" role="button" tabindex="0" onclick="openHelpGuide()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openHelpGuide();}"><i class="fa-solid fa-circle-question"></i>使い方ガイド</div>
   <p class="sidebar-group-label">閲覧</p>
   <div class="tab-btn active" data-tab="archive"><i class="fa-solid fa-boxes-stacked"></i>書き起こし</div>
   <div class="tab-btn" data-tab="terms"><i class="fa-solid fa-book-open"></i>AI解説（用語辞典）</div>
@@ -120,7 +122,6 @@
 
     <section id="view-mergedlist" class="view">
       <div class="panel p-4 mb-4 space-y-3">
-        <p class="text-xs text-gray-400">御書ごとに、結合した文面と、元になった御文（講義録などの御文・解説書の御文）を見る画面です。結合していない御書は、取り込んだ御文を出所つきで順に開けます。</p>
         <div class="relative">
           <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
           <input type="text" id="mlSearch" class="field-input pl-8" placeholder="御書名・御文の言葉で絞り込み…" oninput="onMlSearch()">
@@ -237,6 +238,27 @@
   </div>
 </div>
 
+<!-- 使い方ガイド -->
+<div id="helpGuideModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" style="background:rgba(15,26,48,.55)" onclick="if(event.target===this)closeModal('helpGuideModal')">
+  <div class="panel p-5 w-full max-w-2xl max-h-[88vh] flex flex-col">
+    <h3 class="font-display text-lg mb-3 flex-shrink-0" style="color:var(--navy)"><i class="fa-solid fa-circle-question mr-2"></i>使い方ガイド</h3>
+    <div id="helpGuideBody" class="overflow-y-auto flex-1 pr-1"></div>
+    <div class="flex justify-end mt-3 flex-shrink-0">
+      <button class="btn btn-outline" onclick="closeModal('helpGuideModal')"><i class="fa-solid fa-xmark"></i>閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- 初めて開いたときだけの案内カード -->
+<div id="helpWelcome" class="help-welcome" role="dialog" aria-label="はじめての方へ">
+  <p class="hw-title"><i class="fa-solid fa-hand-point-up"></i>はじめての方へ</p>
+  <p class="hw-text">画面の左上の <b>☰</b> を押すとメニューが開きます。メニューのいちばん上の<b>「使い方ガイド」</b>で、使い方が分かります。</p>
+  <div class="hw-btns">
+    <button type="button" class="btn btn-gold" onclick="helpWelcomeOpenGuide()">使い方を見る</button>
+    <button type="button" class="btn btn-outline" onclick="closeHelpWelcome(true)">閉じる（もう出しません）</button>
+  </div>
+</div>
+
 <!-- db.js が参照するが、閲覧専用ビューアでは使わない要素（無いとエラーになるためダミーで設置） -->
 <input type="file" id="importJsonInput" class="hidden" accept="application/json">
 
@@ -260,6 +282,7 @@
 <script src="js/ai-notes.js"></script>
 <script src="js/search.js"></script>
 <script src="js/merged-list.js"></script>
+<script src="js/help.js"></script>
 <script src="js/viewer.js"></script>
 </body>
 </html>
