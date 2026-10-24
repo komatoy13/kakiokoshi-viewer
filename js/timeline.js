@@ -35,8 +35,8 @@ function toggleEventForm(){
 
 // 西暦・仏紀・和暦のいずれかで年表の日付を整形する
 function formatYMD(y, m, d){
-  if(!y) return '';
-  const parts = [y];
+  if(y===null || y===undefined || y==='' || isNaN(y)) return '';   // 0（仏紀0年など）は空欄にしない
+  const parts = [y<0 ? '前'+(-y) : y];                              // 紀元前は「前949」のように表す
   if(m) parts.push(m);
   if(m && d) parts.push(d);
   return parts.join('.');
@@ -56,7 +56,7 @@ function calendarLabel(y, m, d, warekiText){
   if(mode==='wareki'){
     const wk = parseWarekiText(warekiText||'');
     if(wk && wk.era) return formatWareki(wk, m, d);
-    return formatYMD(y, m, d) + '（和暦不明）';
+    return formatYMD(y, m, d) + (y<701 ? '（和暦なし）' : '（和暦不明）');
   }
   return formatYMD(y, m, d);
 }
@@ -251,7 +251,7 @@ function populatePersonFilter(){
 // 年ジャンプ・追従ハイライトの目印（.tl-era / id / data-year）も、この最初の行の列に付ける。
 function yearCellHtml(y, isFirst){
   if(!isFirst) return '<div class="tl-year"></div>';
-  return `<div class="tl-year tl-era" id="tl-y-${y}" data-year="${y}"><span class="dot"></span><span class="y-sei">${y}</span><span class="y-but">(${butsukiFromSeireki(y)})</span></div>`;
+  return `<div class="tl-year tl-era" id="tl-y-${y}" data-year="${y}"><span class="dot"></span><span class="y-sei">${y<0? '前'+(-y) : y}</span><span class="y-but">(${(()=>{ const b=butsukiFromSeireki(y); return b<0? '前'+(-b) : b; })()})</span></div>`;
 }
 
 function passesTypeFilter(item){

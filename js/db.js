@@ -304,7 +304,8 @@ function warekiYearLabel(era, waYear){ return era + (waYear===1? '元' : waYear)
 function describeYearAll(y){
   if(y===null||y===undefined||isNaN(y)) return '';
   const w = warekiFromSeireki(y);
-  let t = '西暦'+y+'年＝仏紀'+butsukiFromSeireki(y)+'年';
+  const bu = butsukiFromSeireki(y);
+  let t = (y<0 ? '紀元前'+(-y)+'年' : '西暦'+y+'年') + '＝' + (bu<0 ? '仏滅前'+(-bu)+'年' : '仏紀'+bu+'年');
   if(w){
     t += '＝'+warekiYearLabel(w.era, w.waYear);
     if(w.alt) t += '（この年に改元があり、改元前は'+warekiYearLabel(w.alt.era, w.alt.waYear)+'。新しい元号で表示）';
@@ -591,9 +592,11 @@ function kanaRow(reading){
 function personActivityLabel(p){
   const by = personSeireki(p,'birth');
   const dy = personSeireki(p,'death');
-  if(by && dy) return `西暦${by}〜${dy}年`;
-  if(by) return `西暦${by}年〜`;
-  if(dy) return `〜西暦${dy}年`;
+  const has = v => v!==null && v!==undefined && !isNaN(v);
+  const lab = v => v<0 ? '紀元前'+(-v)+'年' : '西暦'+v+'年';
+  if(has(by) && has(dy)) return (by>=0 && dy>=0) ? `西暦${by}〜${dy}年` : `${lab(by)}〜${lab(dy)}`;
+  if(has(by)) return `${lab(by)}〜`;
+  if(has(dy)) return `〜${lab(dy)}`;
   return '';
 }
 function personRelatedDocs(p){
@@ -901,12 +904,10 @@ function buildPersonYearInputs(idx, p, which){
   const y = personSeireki(p, which);
   const sVal = (y===null||y===undefined)? '' : y;
   const bVal = (y===null||y===undefined)? '' : butsukiFromSeireki(y);
+  // 西暦・仏紀・和暦を、いつも1行で見せる（和暦がない年や、紀元前の年でも、年が入っていることが分かるように）
   let hint = '';
   if(y!==null && y!==undefined){
-    const w = warekiFromSeireki(y);
-    const era = which==='birth'? p.birthEra : p.deathEra;
-    if(!w) hint = '和暦なし（大宝元年〔701年〕より前）。西暦で保存されます';
-    else if(w.alt && era===w.era) hint = 'この年は改元の年です（改元前：'+warekiYearLabel(w.alt.era, w.alt.waYear)+'）';
+    hint = describeYearAll(y);
   }
   return `<div class="grid grid-cols-2 gap-1 mt-1">
     <label class="text-xs text-gray-500">西暦（和暦がわからない時はこちらへ）
@@ -922,8 +923,9 @@ function onPersonYearInput(idx, which, kind, val){
   const t = toHalfWidthDigits(String(val||'')).trim();
   if(t===''){ renderPersonTable(); return; }   // 空欄にしても既存の値は消さない（誤操作防止）
   let y = parseInt(t,10);
-  if(isNaN(y) || y===0){ alert('年は数字で入力してください（0年はありません）'); renderPersonTable(); return; }
-  if(kind==='butsuki') y = seirekiFromButsuki(y);
+  if(isNaN(y)){ alert('年は数字で入力してください（紀元前は「-949」のようにマイナスを付けます）'); renderPersonTable(); return; }
+  if(kind==='butsuki') y = seirekiFromButsuki(y);   // 仏紀0年（釈尊の入滅）は、西暦では紀元前949年
+  if(y===0){ alert('西暦0年はありません（紀元前1年の次が、西暦1年です）'); renderPersonTable(); return; }
   const w = warekiFromSeireki(y);
   if(w){ p[which+'Era']=w.era; p[which+'WaYear']=w.waYear; p[which+'Seireki']=null; }
   else { p[which+'Era']=null; p[which+'WaYear']=null; p[which+'Seireki']=y; }
@@ -1155,8 +1157,21 @@ function goshoNamesOf(rec){
 // 御書マスターの「種類」。御文の取り込み先を分けるためのもの。
 const GOSHO_KIND_LABEL = {
   gosho:'御書', nikko:'日興上人・日目上人', nichikan:'日寛上人', shoshi:'正師御文', sutra:'経文', ronshaku:'論釈',
-  bunsho_sho:'文証(邪義/正像)', bunsho_matsu:'文証(邪義/末法)', other:'他'
+  bunsho_sho:'文証(邪義/正像)',
+  ikeda:'池田大作', hosoi:'細井日達', abe:'阿部日顕(信雄)', hayase:'早瀬日如',   // 発言の書（大日蓮○○年○月号など）を、人ごとの分類に登録する
+  other:'他'
 };
+// 人ごとの分類 → 人の名前
+const PERSON_KIND_NAMES = {ikeda:'池田大作', hosoi:'細井日達', abe:'阿部日顕(信雄)', hayase:'早瀬日如'};
+// 名前（呼び方の違いを含む）から、人ごとの分類を調べる。当てはまらなければ ''
+function personKindOfName(n){
+  const t = String(n||'');
+  if(/池田大作|^池田$/.test(t)) return 'ikeda';
+  if(/細井日達|^日達$/.test(t)) return 'hosoi';
+  if(/阿部日顕|阿部信雄|^日顕$/.test(t)) return 'abe';
+  if(/早瀬日如|^日如$/.test(t)) return 'hayase';
+  return '';
+}
 // 以前の版の名前 → 現在の名前（以前の版で保存したデータを、読み込み時に自動で移し替える）
 const GOSHO_KIND_LEGACY = {nikkan:'nichikan', honzon:'gosho'};
 function migrateKindNames(){
@@ -1169,38 +1184,37 @@ function migrateKindNames(){
     if(g.kind==='shoshi' && (g.author==='日寛上人' || isNichikanName(g.name))){ g.kind = 'nichikan'; changed = true; }
     if(g.kind==='other' && /御本尊$/.test(g.name||'')){ g.kind = 'gosho'; changed = true; }
   });
+  // 前の版の「文証(邪義/末法)」は、人ごとの分類に分ける
+  const seeded = (g)=> HERESY_SEED_OLD.some(sd=> sd.name===g.name && JSON.stringify(sd.aliases)===JSON.stringify(g.aliases||[]))
+    && !g.recipient && !g.author && !g.note && !g.era;
+  const used = (g)=> (STATE.citations||[]).some(c=>c.goshoId===g.id) || (STATE.documents||[]).some(d=>d.goshoId===g.id);
+  const keep = [];
+  (STATE.goshoMaster||[]).forEach(g=>{
+    if(g && g.kind==='bunsho_matsu'){
+      changed = true;
+      if(seeded(g) && !used(g)) return;          // 自動で入れた人物名のマスターで、何も紐づいていなければ、削除する
+      g.kind = personKindOfName(g.name) || 'other';
+    }
+    keep.push(g);
+  });
+  if(keep.length !== (STATE.goshoMaster||[]).length) STATE.goshoMaster = keep;
   (STATE.citations||[]).forEach(c=>{
     if(!c) return;
     if(GOSHO_KIND_LEGACY[c.category]){ c.category = GOSHO_KIND_LEGACY[c.category]; changed = true; }
     if(c.category==='shoshi' && isNichikanName(c.sourceName)){ c.category = 'nichikan'; changed = true; }
     if(c.category==='other' && /御本尊$/.test(c.sourceName||'')){ c.category = 'gosho'; changed = true; }
+    if(c.category==='bunsho_matsu'){ c.category = personKindOfName(c.sourceName) || 'other'; changed = true; }
   });
   return changed;
 }
 
-// 「文証(邪義/末法)」に、あらかじめ入れておく4名。人物名のマスターとして作り、
-// 呼び方の違い（日顕・阿部信雄など）は別名として登録しておく。すでにある名前は作らない。
-const HERESY_MATSU_SEED = [
+// 前の版で自動登録した4名（この名前・別名のまま、何も入力されていないものだけを、移行時に削除する目印）
+const HERESY_SEED_OLD = [
   {name:'池田大作', aliases:['池田']},
   {name:'細井日達', aliases:['日達']},
   {name:'阿部日顕(信雄)', aliases:['阿部日顕','阿部信雄','日顕','阿部日顕（信雄）']},
   {name:'早瀬日如', aliases:['日如']}
 ];
-const HERESY_SEED_FLAG = 'gosho_seed_bunsho_matsu_v1';
-function ensureHeresyMasters(){
-  try{ if(localStorage.getItem(HERESY_SEED_FLAG)==='1') return false; }catch(e){}
-  let added = false;
-  HERESY_MATSU_SEED.forEach(seed=>{
-    const all = [seed.name].concat(seed.aliases);
-    const exists = STATE.goshoMaster.some(g=> goshoNamesOf(g).some(n=> all.includes(n)));
-    if(exists) return;
-    STATE.goshoMaster.push({id:uid(), name:seed.name, kind:'bunsho_matsu', aliases:seed.aliases.slice(),
-      era:null, waYear:null, month:null, day:null, recipient:'', author:'', note:''});
-    added = true;
-  });
-  try{ localStorage.setItem(HERESY_SEED_FLAG,'1'); }catch(e){}
-  return added;
-}
 
 function goshoKindOf(rec){
   if(!rec) return 'gosho';

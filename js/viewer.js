@@ -73,6 +73,7 @@ async function bootViewer(){
       boot.insertAdjacentElement('afterend', note);
     }
     switchTab('archive');
+    if(typeof showHelpWelcomeIfFirst==='function') showHelpWelcomeIfFirst();   // 初めて開いたときだけ案内カード（help.js）
   }catch(err){
     boot.innerHTML = '<span style="color:#c1473f"><i class="fa-solid fa-triangle-exclamation mr-1"></i>'+escapeHtml(err.message)+'</span>';
   }
