@@ -1,4 +1,13 @@
 /* ============================================================
+   db.js — データ層（編集アプリとビューアで共通）
+   STATE・和暦/仏紀変換・保存（localStorage／クラウドの読み書き）・人物DBのカード表示 など、
+   「データを持つ・読む」ために両方で必要な部分だけを置く。
+   編集アプリ専用の処理（データの書き込み・同期・バックアップ・人物／御書マスターの編集画面など）は、
+   db-editor.js に分けてある（ビューアには含めない）。
+   ※ 他の全JSファイルより先に読み込むこと
+   ============================================================ */
+
+/* ============================================================
    db.js — データ層
    STATE・和暦/仏紀変換・LocalStorage/クラウド保存・人物データベース・
    同名御書の整合性チェック（差分比較モーダル）・バックアップ/Gist同期
@@ -10,6 +19,7 @@ const KANJI_DIGIT = {'〇':0,'一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'�
 function toHalfWidthDigits(s){
   return (s||'').replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0));
 }
+
 function kanjiToInt(s){
   if(s===undefined||s===null||s==='') return null;
   s = toHalfWidthDigits(s.trim());
@@ -38,13 +48,16 @@ const ERA_TABLE = {
   '正中':1324,'嘉暦':1326,'元徳':1329,'元弘':1331,'正慶':1332,'建武':1334,
   '明治':1868,'大正':1912,'昭和':1926,'平成':1989,'令和':2019
 };
+
 const ERA_LETTER = {'明治':'M','大正':'T','昭和':'S','平成':'H','令和':'R'};
+
 const ERA_NAMES_SORTED = Object.keys(ERA_TABLE).sort((a,b)=>b.length-a.length);
 
 function seirekiFromWareki(era, waYear){
   if(!ERA_TABLE[era] || waYear===null) return null;
   return ERA_TABLE[era] + waYear - 1;
 }
+
 function butsukiFromSeireki(y){ return (y===null||y===undefined||isNaN(y))? null : y+949; }
 
 // Parse free text like "弘安元年十一月二十九日" -> {era,waYear,month,day,seirekiYear,...}
@@ -70,9 +83,6 @@ function parseWarekiText(text){
   if(m2) return {era:null, waYear:null, month:null, day:null, seirekiYear:parseInt(m2[1]), butsuki: butsukiFromSeireki(parseInt(m2[1]))};
   return null;
 }
-
-function pad2(n){ return (n<10? '0':'')+n; }
-function pad3(n){ return String(n).padStart(3,'0'); }
 
 function uid(){ return 'id_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8); }
 
@@ -102,6 +112,7 @@ function eraUsageCounts(){
 
 // クイック選択チップに出す元号の並び：①実績のある元号（使用回数順）②主要元号（未実績でも常に表示）
 const ERA_CHIP_DEFAULTS = ['文永','建治','弘安','貞応','明治','大正','昭和','平成','令和'];
+
 function eraChipList(){
   const counts = eraUsageCounts();
   const used = Object.keys(counts).sort((a,b)=> counts[b]-counts[a]);
@@ -166,17 +177,9 @@ function composeWarekiText(era, year, month, day, isLeap){
   return t;
 }
 
-// 「語句（読み）」「語句〔読み〕」表記から読みを抽出。無ければ語句自体を読みとする
-function extractReading(term){
-  const t = (term||'').trim();
-  if(!t) return {word:'', reading:''};
-  const m = t.match(/^(.*?)[（(]([^）)]{1,30})[）)]\s*$/) || t.match(/^(.*?)[〔]([^〕]{1,30})[〕]\s*$/);
-  if(m) return {word:m[1].trim(), reading:m[2].trim()};
-  return {word:t, reading:t};
-}
-
 // モーダル表示制御（Tailwindのhidden/flexユーティリティを直接切替）
 function openModal(id){ const el=document.getElementById(id); el.classList.remove('hidden'); el.classList.add('flex'); }
+
 function closeModal(id){ const el=document.getElementById(id); el.classList.add('hidden'); el.classList.remove('flex'); }
 
 /* ============================================================
@@ -184,19 +187,13 @@ function closeModal(id){ const el=document.getElementById(id); el.classList.add(
    「完全に削除する」を選んだ時のみ、渡されたコールバックを実行して物理削除する。
    ============================================================ */
 let PENDING_DELETE = null;
+
 function requestDelete(label, onConfirm){
   PENDING_DELETE = onConfirm;
   document.getElementById('confirmDeleteText').textContent =
     `「${label}」を完全に削除します。この操作は元に戻せません。よろしいですか？`;
   openModal('confirmDeleteModal');
 }
-function confirmDeleteExecute(){
-  const cb = PENDING_DELETE;
-  PENDING_DELETE = null;
-  closeModal('confirmDeleteModal');
-  if(typeof cb === 'function') cb();
-}
-function cancelDelete(){ PENDING_DELETE = null; closeModal('confirmDeleteModal'); }
 
 /* ============================================================
    STATE
@@ -243,6 +240,7 @@ const DEFAULT_PERSONS = [
     relationshipTags:['門下在家'], periodTags:['近代'],
     summary:'顕正会現会長。', bio:'', notes:''}
 ];
+
 /* ------------------------------------------------------------
    全元号表（大宝701年〜令和）：西暦→和暦の計算用。元号名 → 元年（西暦）。
    ・年単位の表。年の途中で改元があった年は「新しい元号」を採用する（例：1264年→文永元年）。
@@ -298,6 +296,7 @@ function warekiFromSeireki(y){
   if(cur.start===y && idx>0){ const pv = list[idx-1]; out.alt = {era:pv.era, waYear:y-pv.start+1}; }
   return out;
 }
+
 function warekiYearLabel(era, waYear){ return era + (waYear===1? '元' : waYear) + '年'; }
 
 // 年の説明文（フォームの案内表示用）例：「西暦1253年＝仏紀2202年＝建長5年」
@@ -332,10 +331,15 @@ function describeYearAll(y){
    立てる。フラグが立つまでは何度アプリを開いても旧形式から安全に再移行を試みる。
    ============================================================ */
 const STORAGE_KEY = 'gosho_app_data';           // 旧形式（v2）：読み込み専用（後方互換）
+
 const INDEX_KEY = 'gosho_app_index_v3';         // 新形式：索引（軽量データ）
+
 const MIGRATION_FLAG_KEY = 'gosho_app_migrated_v3';
+
 const CLOUD_AVAILABLE = (typeof window!=='undefined') && !!window.storage;
+
 const DOC_HEAVY_FIELDS = ['fullText'];
+
 const DOC_TRANSIENT_FIELDS = ['_fullLoaded']; // 実行時だけのフラグ。索引にも本文キーにも保存しない
 
 function docFullKey(id){ return 'doc_full:'+id; }
@@ -349,17 +353,12 @@ async function storageGet(key){
   }
   try{ return localStorage.getItem(key); }catch(e){ return null; }
 }
+
 async function storageSet(key, value){
   try{ localStorage.setItem(key, value); }catch(e){ /* 容量超過等はlocalStorageのみ諦める */ }
   if(CLOUD_AVAILABLE){
     try{ await window.storage.set(key, value, false); }
     catch(e){ console.error('クラウド同期に失敗しました：'+key, e); }
-  }
-}
-async function storageDelete(key){
-  try{ localStorage.removeItem(key); }catch(e){ /* noop */ }
-  if(CLOUD_AVAILABLE){
-    try{ await window.storage.delete(key, false); }catch(e){ /* 元々無ければ失敗するが無視してよい */ }
   }
 }
 
@@ -375,6 +374,7 @@ function formatBackupTimestamp(){
   const p = n=>String(n).padStart(2,'0');
   return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'_'+p(d.getHours())+p(d.getMinutes());
 }
+
 // 事故防止のための自動バックアップ：現在のデータを丸ごとJSONファイルとしてダウンロードする
 function downloadJsonBackup(data, filename){
   try{
@@ -385,75 +385,6 @@ function downloadJsonBackup(data, filename){
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(()=>URL.revokeObjectURL(url), 5000);
   }catch(e){ console.error('バックアップファイルの生成に失敗しました', e); }
-}
-
-// ------------------------------------------------------------
-// 移行処理：実行前に必ず全データを自動バックアップし、旧データは削除せず残したまま
-// 新形式（索引＋文書ごとの個別キー）を書き込む。成功した場合のみ移行済みフラグを立てる。
-// ------------------------------------------------------------
-async function migrateToPerDocStorage(oldData){
-  try{
-    downloadJsonBackup(oldData, 'gosho_backup_before_migration_'+formatBackupTimestamp()+'.json');
-
-    const docs = oldData.documents || [];
-    for(const d of docs){
-      const heavy = {fullText: d.fullText||''};
-      await storageSet(docFullKey(d.id), JSON.stringify(heavy));
-    }
-
-    const indexPayload = {
-      documents: docs.map(toLightDoc),
-      events: oldData.events || [],
-      persons: oldData.persons || DEFAULT_PERSONS,
-      settings: oldData.settings || {},
-      relationTagsMaster: oldData.relationTagsMaster || ['門下僧','門下在家','邪宗僧','鎌倉幕府'],
-      goshoMaster: oldData.goshoMaster || [],
-      mergedGoshos: oldData.mergedGoshos || []
-    };
-    await storageSet(INDEX_KEY, JSON.stringify(indexPayload));
-    await storageSet(MIGRATION_FLAG_KEY, '1');
-    console.log('データ構造の移行が完了しました（旧データはバックアップとして残されています）');
-  }catch(e){
-    console.error('データ移行に失敗しました。旧形式のまま動作を継続します。', e);
-    // フラグを立てないので、次回起動時にも旧形式からの再移行が試みられる（安全側に倒す）
-  }
-}
-
-// ------------------------------------------------------------
-// 起動時の読み込み：新形式（索引）があればそれを使用。無ければ旧形式を読み込んだ上で
-// 安全な移行を実行する。新形式の読み込みに失敗した場合も旧形式へ自動フォールバックする。
-// ------------------------------------------------------------
-async function loadAppData(){
-  const migrated = await storageGet(MIGRATION_FLAG_KEY);
-  if(migrated){
-    try{
-      const indexRaw = await storageGet(INDEX_KEY);
-      if(indexRaw) return JSON.parse(indexRaw); // documents は軽量版（fullTextは未読み込み）
-    }catch(e){
-      console.error('新形式データの読み込みに失敗しました。旧形式へフォールバックします。', e);
-    }
-  }
-  let oldData = null;
-  try{
-    const raw = await storageGet(STORAGE_KEY);
-    if(raw) oldData = JSON.parse(raw);
-  }catch(e){ /* noop */ }
-  if(!oldData){
-    try{
-      const documents = JSON.parse(localStorage.getItem('gosho_documents')||'[]');
-      const events = JSON.parse(localStorage.getItem('gosho_events')||'[]');
-      const persons = JSON.parse(localStorage.getItem('gosho_persons')||'null');
-      const settings = JSON.parse(localStorage.getItem('gosho_settings')||'null');
-      if((documents&&documents.length) || (events&&events.length)){
-        oldData = {documents, events, persons: persons||undefined, settings: settings||undefined};
-      }
-    }catch(e){ /* noop */ }
-  }
-  if(!oldData) return null; // 初回起動：何も保存されていない
-
-  if(!migrated) await migrateToPerDocStorage(oldData);
-  (oldData.documents||[]).forEach(d=>{ d._fullLoaded = true; }); // 移行直後はメモリ上のデータがそのまま最新
-  return oldData;
 }
 
 // ------------------------------------------------------------
@@ -480,6 +411,7 @@ async function ensureDocFullLoaded(id){
 // 保存（デバウンス付き）：連続する変更は500msまとめてから1回だけ書き込む
 // ------------------------------------------------------------
 const _debounceTimers = {};
+
 function debounce(key, fn, delay){
   if(_debounceTimers[key]) clearTimeout(_debounceTimers[key]);
   _debounceTimers[key] = setTimeout(()=>{ delete _debounceTimers[key]; fn(); }, delay==null?500:delay);
@@ -499,18 +431,9 @@ async function persistIndexNow(){
   };
   await storageSet(INDEX_KEY, JSON.stringify(payload));
 }
+
 // 文書一覧・人物・設定など「軽いデータ」の保存（デバウンス経由）
 function persistAll(){ debounce('index', persistIndexNow, 500); }
-
-async function persistDocFullNow(id){
-  const d = STATE.documents.find(x=>x.id===id);
-  if(!d) return;
-  const heavy = {fullText: d.fullText||''};
-  await storageSet(docFullKey(id), JSON.stringify(heavy));
-}
-// 文書の本文・御文（重いデータ）の保存（デバウンス経由、文書ごとに個別）
-function persistDocFull(id){ debounce('docfull:'+id, ()=>persistDocFullNow(id), 500); }
-async function deleteDocFull(id){ await storageDelete(docFullKey(id)); }
 
 let STATE = {
   documents: [],
@@ -548,29 +471,14 @@ function personSeireki(p, which){
   return null;
 }
 
-function computeAge(authorName, seirekiYear, seirekiMonth, seirekiDay){
-  if(!seirekiYear) return null;
-  const p = STATE.persons.find(pp=>pp.name===authorName);
-  if(!p) return null;
-  const birthY = personSeireki(p,'birth');
-  if(!birthY) return null;
-  if(p.ageMethod==='kazoe'){
-    return seirekiYear - birthY + 1;
-  } else {
-    let age = seirekiYear - birthY;
-    if(p.birthMonth && seirekiMonth){
-      if(seirekiMonth < p.birthMonth || (seirekiMonth===p.birthMonth && seirekiDay && p.birthDay && seirekiDay < p.birthDay)) age -= 1;
-    }
-    return age;
-  }
-}
-
 /* ============================================================
    人物DBカード表示：属性バッジ・活動年代・50音インデックス・
    関連御書／関連年表出来事の紐付け
    ============================================================ */
 const RELATION_TAGS_DEFAULT = ['門下僧','門下在家','邪宗僧','鎌倉幕府'];
+
 const PERIOD_TAGS = ['釈尊在世','正法','像法','御在世','戦国時代','江戸時代','戦前・戦中','近代'];
+
 const KANA_ROWS = [
   {key:'あ', chars:'あいうえおぁぃぅぇぉ'},
   {key:'か', chars:'かきくけこがぎぐげご'},
@@ -583,12 +491,14 @@ const KANA_ROWS = [
   {key:'ら', chars:'らりるれろ'},
   {key:'わ', chars:'わをんゎ'}
 ];
+
 function kanaRow(reading){
   const c = (reading||'').trim()[0];
   if(!c) return '他';
   const hit = KANA_ROWS.find(r=>r.chars.includes(c));
   return hit? hit.key : '他';
 }
+
 function personActivityLabel(p){
   const by = personSeireki(p,'birth');
   const dy = personSeireki(p,'death');
@@ -599,384 +509,20 @@ function personActivityLabel(p){
   if(has(dy)) return `〜${lab(dy)}`;
   return '';
 }
+
 function personRelatedDocs(p){
   return STATE.documents.filter(d=> d.recipient===p.name || d.author===p.name);
 }
+
 function personRelatedEvents(p){
   const manual = STATE.events.filter(e=>e.person===p.name);
   const auto = (typeof personAutoEvents==='function'? personAutoEvents():[]).filter(e=>e.person===p.name);
   return [...manual, ...auto].sort((a,b)=>(a.seirekiYear||0)-(b.seirekiYear||0));
 }
 
-/* ============================================================
-   同名御書データの自動整合性チェック・一括統一機能
-   ============================================================ */
-// 同じ「御書名」を持つ既存データ（excludeId自身は除く）を探す。複数あってもDB側は
-// 既に一貫している前提で、最初に見つかったものを比較の基準として用いる。
-function checkTitleConflict(title, excludeId){
-  const t = (title||'').trim();
-  if(!t) return null;
-  return STATE.documents.find(d=> d.id!==excludeId && (d.title||'').trim()===t) || null;
-}
-
-function formatDateDisplay(d){
-  if(d.warekiText) return d.warekiText;
-  if(d.seirekiYear) return d.seirekiYear+'年'+(d.seirekiMonth?d.seirekiMonth+'月':'')+(d.seirekiDay?d.seirekiDay+'日':'');
-  return '';
-}
-
-// 著者・受持者・日付（和暦／西暦）・年齢の4項目のうち、1つでも異なれば不一致とみなす
-function valuesDiffer(existing, incoming){
-  const diffs = {};
-  if((existing.author||'') !== (incoming.author||'')) diffs.author = true;
-  if((existing.recipient||'') !== (incoming.recipient||'')) diffs.recipient = true;
-  const existingDateKey = [existing.warekiText||'', existing.seirekiYear||'', existing.seirekiMonth||'', existing.seirekiDay||''].join('|');
-  const incomingDateKey = [incoming.warekiText||'', incoming.seirekiYear||'', incoming.seirekiMonth||'', incoming.seirekiDay||''].join('|');
-  if(existingDateKey !== incomingDateKey) diffs.date = true;
-  if((existing.ageNote||'') !== (incoming.ageNote||'')) diffs.age = true;
-  return diffs;
-}
-
 let pendingConflictResolve = null;
 
-// 差分比較モーダルを表示し、ユーザーの選択（'existing'/'incoming'/'keep'）をPromiseで返す
-function showConflictModal(title, existingDoc, incomingValues, diffs){
-  return new Promise(resolve=>{
-    pendingConflictResolve = resolve;
-    document.getElementById('conflictModalTitle').innerHTML =
-      '<i class="fa-solid fa-triangle-exclamation mr-2"></i>【データ不一致の警告】『'+escapeHtml(title)+'』の既存データと今回の入力内容に差分があります。';
-    const rows = [
-      ['author', '著者', existingDoc.author, incomingValues.author],
-      ['recipient', '受持者', existingDoc.recipient, incomingValues.recipient],
-      ['date', '日付', formatDateDisplay(existingDoc), formatDateDisplay(incomingValues)],
-      ['age', '年齢', existingDoc.ageNote, incomingValues.ageNote]
-    ];
-    document.getElementById('conflictModalBody').innerHTML = rows.map(([key,label,ex,inc])=>{
-      const changed = !!diffs[key];
-      return `<tr style="border-bottom:1px solid var(--line); ${changed?'background:#fff3e0':''}">
-        <td class="py-2 pr-3 font-semibold whitespace-nowrap">${escapeHtml(label)}${changed?' <span style=\"color:#c1473f\">●</span>':''}</td>
-        <td class="py-2 pr-3">${escapeHtml(ex||'（空欄）')}</td>
-        <td class="py-2">${escapeHtml(inc||'（空欄）')}</td>
-      </tr>`;
-    }).join('');
-    openModal('conflictModal');
-  });
-}
-function resolveConflictChoice(choice){
-  closeModal('conflictModal');
-  if(pendingConflictResolve){ pendingConflictResolve(choice); pendingConflictResolve = null; }
-}
-
-// 「今回の入力データで統一する」が選ばれた場合、同名の既存データすべてを一括更新し、
-// 人物DBに基づいて年齢も再計算する
-function unifyExistingWithIncoming(title, incoming, excludeId){
-  const matches = STATE.documents.filter(d=> d.id!==excludeId && (d.title||'').trim()===title.trim());
-  const recalculated = computeAge(incoming.author, incoming.seirekiYear, incoming.seirekiMonth, incoming.seirekiDay);
-  const ageForOthers = recalculated!==null ? recalculated+'歳' : incoming.ageNote;
-  matches.forEach(m=>{
-    m.author = incoming.author;
-    m.recipient = incoming.recipient;
-    m.warekiText = incoming.warekiText;
-    m.seirekiYear = incoming.seirekiYear;
-    m.seirekiMonth = incoming.seirekiMonth;
-    m.seirekiDay = incoming.seirekiDay;
-    m.butsuki = incoming.butsuki;
-    m.ageNote = ageForOthers;
-    m.updatedAt = Date.now();
-  });
-  return matches.length;
-}
-
-// 「既存のデータで統一する」が選ばれた場合、今回の入力側を既存データの値に合わせ、
-// 人物DBに基づいて年齢を再計算する
-function applyExistingValuesTo(target, existingDoc){
-  target.author = existingDoc.author;
-  target.recipient = existingDoc.recipient;
-  target.warekiText = existingDoc.warekiText;
-  target.seirekiYear = existingDoc.seirekiYear;
-  target.seirekiMonth = existingDoc.seirekiMonth;
-  target.seirekiDay = existingDoc.seirekiDay;
-  target.butsuki = existingDoc.butsuki;
-  const recalculated = computeAge(target.author, target.seirekiYear, target.seirekiMonth, target.seirekiDay);
-  target.ageNote = recalculated!==null ? recalculated+'歳' : existingDoc.ageNote;
-  return target;
-}
-
-// ファイル読み込み完了時：解析結果（draft）を既存の同名データと照合し、必要ならモーダルで選択させる
-async function resolveTitleConflictForDraft(draft){
-  const existingDoc = checkTitleConflict(draft.title, null);
-  if(!existingDoc) return draft;
-  const diffs = valuesDiffer(existingDoc, draft);
-  if(Object.keys(diffs).length===0) return draft;
-  const choice = await showConflictModal(draft.title, existingDoc, draft, diffs);
-  if(choice==='existing'){
-    applyExistingValuesTo(draft, existingDoc);
-  } else if(choice==='incoming'){
-    const count = unifyExistingWithIncoming(draft.title, draft, null);
-    if(count>0){ persistAll(); renderDocList(); }
-  }
-  // 'keep' の場合は何もせずそのまま
-  return draft;
-}
-
-// 保存／更新ボタン押下時：これから保存するdocを既存の同名データと照合し、必要ならモーダルで選択させる
-async function resolveTitleConflictForSave(doc, excludeId){
-  const existingDoc = checkTitleConflict(doc.title, excludeId);
-  if(!existingDoc) return doc;
-  const diffs = valuesDiffer(existingDoc, doc);
-  if(Object.keys(diffs).length===0) return doc;
-  const choice = await showConflictModal(doc.title, existingDoc, doc, diffs);
-  if(choice==='existing'){
-    applyExistingValuesTo(doc, existingDoc);
-  } else if(choice==='incoming'){
-    unifyExistingWithIncoming(doc.title, doc, excludeId);
-  }
-  // 'keep' の場合は何もせずそのまま保存
-  return doc;
-}
-
-/* ============================================================
-   TABS
-   ============================================================ */
-function ensureRecipientPerson(name){
-  const trimmed = (name||'').trim();
-  if(!trimmed) return;
-  const exists = STATE.persons.some(p=>p.name===trimmed);
-  if(exists) return;
-  STATE.persons.push({
-    id: uid(), name: trimmed, reading:'', alias:'', ageMethod:'kazoe', deathLabel:'',
-    birthEra:null, birthWaYear:null, birthMonth:null, birthDay:null,
-    deathEra:null, deathWaYear:null, deathMonth:null, deathDay:null, deathAgeText:'',
-    relationshipTags:[], periodTags:[], summary:'', bio:'', notes:''
-  });
-}
-
 function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-
-/* ============================================================
-   TIMELINE
-   ============================================================ */
-/* 設定タブの人物編集一覧：件数が増えても探しやすいよう、検索・50音絞り込み・
-   1行要約＋クリックで展開（アコーディオン）に対応する。 */
-function onPersonEditSearch(){
-  STATE.personEdit.query = document.getElementById('personEditSearch').value;
-  renderPersonTable();
-}
-function setPersonEditKana(k){ STATE.personEdit.kana = k; renderPersonTable(); }
-function togglePersonEditExpand(id){
-  if(!STATE.personEdit.expandedIds) STATE.personEdit.expandedIds = new Set();
-  if(STATE.personEdit.expandedIds.has(id)) STATE.personEdit.expandedIds.delete(id);
-  else STATE.personEdit.expandedIds.add(id);
-  renderPersonTable();
-}
-
-function renderPersonTable(){
-  const el = document.getElementById('personTable');
-  if(!el) return;
-  if(!STATE.personEdit.expandedIds) STATE.personEdit.expandedIds = new Set();
-
-  // 50音インデックス（人物DBカード画面と同じ区分を流用）
-  const kanaEl = document.getElementById('personEditKanaIndex');
-  if(kanaEl){
-    kanaEl.innerHTML = `<button type="button" class="filter-btn ${STATE.personEdit.kana==='all'?'active':''}" onclick="setPersonEditKana('all')">すべて</button>` +
-      KANA_ROWS.map(r=>`<button type="button" class="filter-btn ${STATE.personEdit.kana===r.key?'active':''}" onclick="setPersonEditKana('${r.key}')">${r.key}</button>`).join('');
-  }
-
-  // 元の配列インデックス（updatePerson等が使う）を保ったまま絞り込む
-  let entries = STATE.persons.map((p,idx)=>({p, idx}));
-  if(STATE.personEdit.kana!=='all') entries = entries.filter(e=>kanaRow(e.p.reading)===STATE.personEdit.kana);
-  const q = (STATE.personEdit.query||'').trim().toLowerCase();
-  if(q) entries = entries.filter(e=> (e.p.name+' '+(e.p.reading||'')+' '+(e.p.alias||'')+' '+(e.p.summary||'')).toLowerCase().includes(q));
-
-  const countEl = document.getElementById('personEditCount');
-  if(countEl) countEl.textContent = `${entries.length}件 / 全${STATE.persons.length}件`;
-
-  if(!entries.length){
-    el.innerHTML = '<p class="text-sm text-gray-400 py-6 text-center">該当する人物がいません。</p>';
-    return;
-  }
-
-  el.innerHTML = entries.map(({p, idx})=>{
-    const expanded = STATE.personEdit.expandedIds.has(p.id);
-    const badges = (p.relationshipTags||[]).map(t=>`<span class="chip">${escapeHtml(t)}</span>`).join('');
-    const activity = personActivityLabel(p);
-    if(!expanded){
-      // 折りたたみ時：1行の要約だけを表示する
-      return `<div class="border rounded-lg px-3 py-2 cursor-pointer hover:bg-black/5" style="border-color:var(--line)" onclick="togglePersonEditExpand('${p.id}')">
-        <div class="flex items-center gap-2 flex-wrap">
-          <i class="fa-solid fa-chevron-right text-xs" style="color:var(--gray)"></i>
-          <span class="font-semibold text-sm">${escapeHtml(p.name)}</span>
-          ${p.reading? `<span class="text-xs text-gray-400">（${escapeHtml(p.reading)}）</span>`:''}
-          ${badges}
-          ${activity? `<span class="text-xs" style="color:var(--gray)">${escapeHtml(activity)}</span>`:''}
-        </div>
-      </div>`;
-    }
-    return `
-    <div class="border rounded-lg p-3" style="border-color:var(--line)">
-      <div class="flex items-center gap-2 mb-2 cursor-pointer" onclick="togglePersonEditExpand('${p.id}')">
-        <i class="fa-solid fa-chevron-down text-xs" style="color:var(--gray)"></i>
-        <span class="font-semibold text-sm">${escapeHtml(p.name)}</span>
-        <span class="text-xs text-gray-400 ml-auto">クリックで折りたたむ</span>
-      </div>
-      <div class="flex items-center gap-2 mb-2">
-        <input class="field-input font-semibold flex-1" value="${escapeHtml(p.name)}" placeholder="氏名" onchange="updatePerson(${idx},'name',this.value)">
-        <input class="field-input flex-1" placeholder="よみ（50音検索用）例：にちれんだいしょうにん" value="${escapeHtml(p.reading||'')}" onchange="updatePerson(${idx},'reading',this.value)">
-        <button class="btn btn-danger text-xs flex-shrink-0" onclick="removePerson(${idx})"><i class="fa-solid fa-trash"></i>削除</button>
-      </div>
-      <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-2">
-        <input class="field-input" placeholder="別称（カード表示用）例：伊予房" value="${escapeHtml(p.alias||'')}" onchange="updatePerson(${idx},'alias',this.value)">
-        <input class="field-input sm:col-span-2" placeholder="概要（カードに1〜2行で表示）" value="${escapeHtml(p.summary||'')}" onchange="updatePerson(${idx},'summary',this.value)">
-      </div>
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-        <div>
-          <label class="field-label">生年月日</label>
-          <div class="flex flex-wrap gap-1 mb-1">${buildEraChipsHtml('birth'+idx, p.birthEra)}</div>
-          <div class="grid grid-cols-4 gap-1">
-            <select class="field-select" onchange="updatePerson(${idx},'birthEra',this.value||null); renderPersonTable();">${buildEraSelectOptions(p.birthEra)}</select>
-            <select class="field-select" onchange="updatePerson(${idx},'birthWaYear',this.value?parseInt(this.value):null); renderPersonTable();">${buildYearSelectOptions(p.birthWaYear)}</select>
-            <select class="field-select" onchange="updatePerson(${idx},'birthMonth',this.value?parseInt(this.value):null)">${buildMonthSelectOptions(p.birthMonth)}</select>
-            <select class="field-select" onchange="updatePerson(${idx},'birthDay',this.value?parseInt(this.value):null)">${buildDaySelectOptions(p.birthDay)}</select>
-          </div>
-          ${buildPersonYearInputs(idx, p, 'birth')}
-        </div>
-        <div>
-          <label class="field-label">没年月日</label>
-          <div class="flex flex-wrap gap-1 mb-1">${buildEraChipsHtml('death'+idx, p.deathEra)}</div>
-          <div class="grid grid-cols-4 gap-1">
-            <select class="field-select" onchange="updatePerson(${idx},'deathEra',this.value||null); renderPersonTable();">${buildEraSelectOptions(p.deathEra)}</select>
-            <select class="field-select" onchange="updatePerson(${idx},'deathWaYear',this.value?parseInt(this.value):null); renderPersonTable();">${buildYearSelectOptions(p.deathWaYear)}</select>
-            <select class="field-select" onchange="updatePerson(${idx},'deathMonth',this.value?parseInt(this.value):null)">${buildMonthSelectOptions(p.deathMonth)}</select>
-            <select class="field-select" onchange="updatePerson(${idx},'deathDay',this.value?parseInt(this.value):null)">${buildDaySelectOptions(p.deathDay)}</select>
-          </div>
-          ${buildPersonYearInputs(idx, p, 'death')}
-        </div>
-        <div>
-          <label class="field-label">没表現・年齢</label>
-          <div class="grid grid-cols-2 gap-1">
-            <select class="field-select" onchange="updatePerson(${idx},'deathLabel',this.value)">
-              ${['御入滅','涅槃','御遷化','御逝去','死去','崩御','死亡',''].map(o=>`<option value="${o}" ${p.deathLabel===o?'selected':''}>${o||'（なし）'}</option>`).join('')}
-            </select>
-            <select class="field-select" onchange="updatePerson(${idx},'ageMethod',this.value)">
-              <option value="kazoe" ${p.ageMethod==='kazoe'?'selected':''}>数え年</option>
-              <option value="man" ${p.ageMethod==='man'?'selected':''}>満年齢</option>
-            </select>
-          </div>
-          <input class="field-input mt-1" placeholder="没年齢テキスト（例：聖寿61歳）" value="${escapeHtml(p.deathAgeText||'')}" onchange="updatePerson(${idx},'deathAgeText',this.value)">
-        </div>
-      </div>
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
-        <div>
-          <label class="field-label">関係性バッジ（カード・絞り込み用／「マスター管理」でタグを追加・削除できます）</label>
-          <div class="flex flex-wrap gap-1">${STATE.relationTagsMaster.map(t=>`<button type="button" class="filter-btn ${(p.relationshipTags||[]).includes(t)?'active':''}" onclick="togglePersonTag(${idx},'relationshipTags','${escapeHtml(t)}')">${escapeHtml(t)}</button>`).join('')}</div>
-        </div>
-        <div>
-          <label class="field-label">時代バッジ（カード・絞り込み用）</label>
-          <div class="flex flex-wrap gap-1">${PERIOD_TAGS.map(t=>`<button type="button" class="filter-btn ${(p.periodTags||[]).includes(t)?'active':''}" onclick="togglePersonTag(${idx},'periodTags','${t}')">${t}</button>`).join('')}</div>
-        </div>
-      </div>
-      <div class="mt-2">
-        <label class="field-label">生涯背景（詳細ポップアップに表示）</label>
-        <textarea class="field-textarea" rows="2" onchange="updatePerson(${idx},'bio',this.value)">${escapeHtml(p.bio||'')}</textarea>
-      </div>
-    </div>`;
-  }).join('');
-}
-function togglePersonTag(idx, key, tag){
-  const p = STATE.persons[idx];
-  const list = p[key] ? p[key].slice() : [];
-  const i = list.indexOf(tag);
-  if(i>=0) list.splice(i,1); else list.push(tag);
-  updatePerson(idx, key, list);
-  renderPersonTable();
-}
-function updatePerson(idx, key, val){
-  STATE.persons[idx][key]=val;
-  // 和暦（元号・年）を選んだら、西暦の直接入力値は不要になるので消す（和暦から計算される）
-  const m = /^(birth|death)(Era|WaYear)$/.exec(key);
-  if(m && val!==null && val!==undefined && val!=='') STATE.persons[idx][m[1]+'Seireki'] = null;
-  persistAll();
-}
-
-/* 人物の生年・没年：西暦／仏紀で入力すると、和暦（元号・年）を計算して当てはめる。
-   月・日はそのまま残す。和暦に当てはまらない年（大宝より前）は、西暦のまま保存する。 */
-function buildPersonYearInputs(idx, p, which){
-  const y = personSeireki(p, which);
-  const sVal = (y===null||y===undefined)? '' : y;
-  const bVal = (y===null||y===undefined)? '' : butsukiFromSeireki(y);
-  // 西暦・仏紀・和暦を、いつも1行で見せる（和暦がない年や、紀元前の年でも、年が入っていることが分かるように）
-  let hint = '';
-  if(y!==null && y!==undefined){
-    hint = describeYearAll(y);
-  }
-  return `<div class="grid grid-cols-2 gap-1 mt-1">
-    <label class="text-xs text-gray-500">西暦（和暦がわからない時はこちらへ）
-      <input type="number" class="field-input mt-0.5" placeholder="例：1222" value="${sVal}" onchange="onPersonYearInput(${idx},'${which}','seireki',this.value)">
-    </label>
-    <label class="text-xs text-gray-500">仏紀（仏滅後）
-      <input type="number" class="field-input mt-0.5" placeholder="例：2171" value="${bVal}" onchange="onPersonYearInput(${idx},'${which}','butsuki',this.value)">
-    </label>
-  </div>${hint? `<p class="text-xs mt-1" style="color:var(--gray)">${escapeHtml(hint)}</p>`:''}`;
-}
-function onPersonYearInput(idx, which, kind, val){
-  const p = STATE.persons[idx];
-  const t = toHalfWidthDigits(String(val||'')).trim();
-  if(t===''){ renderPersonTable(); return; }   // 空欄にしても既存の値は消さない（誤操作防止）
-  let y = parseInt(t,10);
-  if(isNaN(y)){ alert('年は数字で入力してください（紀元前は「-949」のようにマイナスを付けます）'); renderPersonTable(); return; }
-  if(kind==='butsuki') y = seirekiFromButsuki(y);   // 仏紀0年（釈尊の入滅）は、西暦では紀元前949年
-  if(y===0){ alert('西暦0年はありません（紀元前1年の次が、西暦1年です）'); renderPersonTable(); return; }
-  const w = warekiFromSeireki(y);
-  if(w){ p[which+'Era']=w.era; p[which+'WaYear']=w.waYear; p[which+'Seireki']=null; }
-  else { p[which+'Era']=null; p[which+'WaYear']=null; p[which+'Seireki']=y; }
-  persistAll();
-  renderPersonTable();
-  if(typeof renderTimeline==='function') renderTimeline();
-}
-function addPerson(){
-  STATE.persons.push({id:uid(), name:'新規人物', reading:'', alias:'', ageMethod:'kazoe', deathLabel:'',
-    birthEra:null, birthWaYear:null, birthMonth:null, birthDay:null,
-    deathEra:null, deathWaYear:null, deathMonth:null, deathDay:null, deathAgeText:'',
-    relationshipTags:[], periodTags:[], summary:'', bio:'', notes:''});
-  persistAll(); renderPersonTable();
-}
-function removePerson(idx){
-  const p = STATE.persons[idx];
-  requestDelete(p.name, ()=>{ STATE.persons.splice(idx,1); persistAll(); renderPersonTable(); });
-}
-
-/* ============================================================
-   関係性タグのマスター管理（設定タブ）：ユーザーが自由に追加・削除できる
-   ============================================================ */
-function renderRelationTagMaster(){
-  const el = document.getElementById('relationTagMaster');
-  if(!el) return;
-  el.innerHTML = STATE.relationTagsMaster.map(t=>
-    `<span class="chip">${escapeHtml(t)}<button type="button" class="tag-remove-btn" title="このタグを削除" onclick="removeRelationTagMaster(${escapeHtml(JSON.stringify(t))})">×</button></span>`
-  ).join('') || '<p class="text-xs text-gray-400">タグがありません。下のフォームから追加してください。</p>';
-}
-function addRelationTagMaster(){
-  const input = document.getElementById('newRelationTagInput');
-  const val = (input.value||'').trim();
-  if(!val) return;
-  if(!STATE.relationTagsMaster.includes(val)) STATE.relationTagsMaster.push(val);
-  input.value = '';
-  persistAll();
-  renderRelationTagMaster();
-  renderPersonTable();
-  renderPersonCards();
-}
-function removeRelationTagMaster(tag){
-  requestDelete(tag, ()=>{
-    STATE.relationTagsMaster = STATE.relationTagsMaster.filter(t=>t!==tag);
-    STATE.persons.forEach(p=>{ if(p.relationshipTags) p.relationshipTags = p.relationshipTags.filter(t=>t!==tag); });
-    if(STATE.personBrowse.relation===tag) STATE.personBrowse.relation = 'all';
-    persistAll();
-    renderRelationTagMaster();
-    renderPersonTable();
-    renderPersonCards();
-  });
-}
 
 /* ============================================================
    御書マスター管理（設定タブ）：「同じ御書」判定・御書結合機能の基準になる
@@ -998,161 +544,9 @@ function goshoRecordLabel(rec){
   if(rec.note) label += `［${rec.note}］`;
   return label;
 }
+
 function goshoRecordById(id){ return STATE.goshoMaster.find(g=>g.id===id); }
 
-/* 御書マスター編集一覧：件数が増えても探しやすいよう、検索と
-   1行要約＋クリックで展開（アコーディオン）に対応する。 */
-function onGoshoEditSearch(){
-  STATE.goshoEdit.query = document.getElementById('goshoEditSearch').value;
-  renderGoshoNameMaster();
-}
-function toggleGoshoEditExpand(id){
-  if(!STATE.goshoEdit.expandedIds) STATE.goshoEdit.expandedIds = new Set();
-  if(STATE.goshoEdit.expandedIds.has(id)) STATE.goshoEdit.expandedIds.delete(id);
-  else STATE.goshoEdit.expandedIds.add(id);
-  renderGoshoNameMaster();
-}
-
-function renderGoshoNameMaster(){
-  const el = document.getElementById('goshoNameMaster');
-  if(!el) return;
-  if(!STATE.goshoEdit.expandedIds) STATE.goshoEdit.expandedIds = new Set();
-  if(!STATE.goshoMaster.length){
-    el.innerHTML = '<p class="text-xs text-gray-400">まだ御書が登録されていません。下のフォームから追加するか、文書取り込み時に自動追加されます。</p>';
-    const c0 = document.getElementById('goshoEditCount');
-    if(c0) c0.textContent = '0件';
-    return;
-  }
-  // 元の配列インデックス（元号チップのnamespaceが重複しないよう）を保ったまま絞り込む
-  let entries = STATE.goshoMaster.map((rec,idx)=>({rec, idx}));
-  const q = (STATE.goshoEdit.query||'').trim().toLowerCase();
-  if(q) entries = entries.filter(e=> (goshoNamesOf(e.rec).join(' ')+' '+(e.rec.recipient||'')+' '+(e.rec.author||'')+' '+(e.rec.note||'')).toLowerCase().includes(q));
-
-  const countEl = document.getElementById('goshoEditCount');
-  if(countEl) countEl.textContent = `${entries.length}件 / 全${STATE.goshoMaster.length}件`;
-
-  if(!entries.length){
-    el.innerHTML = '<p class="text-sm text-gray-400 py-6 text-center">該当する御書がありません。</p>';
-    return;
-  }
-
-  el.innerHTML = entries.map(({rec, idx})=>{
-    const expanded = STATE.goshoEdit.expandedIds.has(rec.id);
-    if(!expanded){
-      return `<div class="border rounded-lg px-3 py-2 mb-2 cursor-pointer hover:bg-black/5" style="border-color:var(--line)" onclick="toggleGoshoEditExpand('${rec.id}')">
-        <div class="flex items-center gap-2 flex-wrap">
-          <i class="fa-solid fa-chevron-right text-xs" style="color:var(--gray)"></i>
-          <span class="font-semibold text-sm">${escapeHtml(goshoRecordLabel(rec))}</span>
-          ${goshoKindOf(rec)!=='gosho'? `<span class="chip" style="background:var(--gold-soft)">${GOSHO_KIND_LABEL[goshoKindOf(rec)]}</span>`:''}
-          ${rec.recipient? `<span class="chip">宛：${escapeHtml(rec.recipient)}</span>`:''}
-          ${rec.author? `<span class="chip">${escapeHtml(rec.author)}</span>`:''}
-          ${(rec.aliases&&rec.aliases.length)? `<span class="text-xs text-gray-400">別名：${escapeHtml(rec.aliases.join('・'))}</span>`:''}
-        </div>
-      </div>`;
-    }
-    return `
-    <div class="border rounded-lg p-3 mb-2" style="border-color:var(--line)">
-      <div class="flex items-center gap-2 mb-2 cursor-pointer" onclick="toggleGoshoEditExpand('${rec.id}')">
-        <i class="fa-solid fa-chevron-down text-xs" style="color:var(--gray)"></i>
-        <span class="font-semibold text-sm">${escapeHtml(goshoRecordLabel(rec))}</span>
-        <span class="text-xs text-gray-400 ml-auto">クリックで折りたたむ</span>
-      </div>
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
-        <input class="field-input sm:col-span-2" placeholder="御書名（例：四条金吾殿御返事）" value="${escapeHtml(rec.name||'')}" onchange="updateGoshoRecord('${rec.id}','name',this.value)">
-        <input class="field-input" placeholder="宛先・対告衆（例：四条金吾）" value="${escapeHtml(rec.recipient||'')}" onchange="updateGoshoRecord('${rec.id}','recipient',this.value)">
-        <input class="field-input" placeholder="説いた人（例：日蓮大聖人）" value="${escapeHtml(rec.author||'')}" onchange="updateGoshoRecord('${rec.id}','author',this.value)">
-      </div>
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
-        <div>
-          <label class="field-label">種類</label>
-          <select class="field-select" onchange="updateGoshoRecord('${rec.id}','kind',this.value); renderGoshoNameMaster();">
-            ${Object.keys(GOSHO_KIND_LABEL).map(k=>`<option value="${k}" ${goshoKindOf(rec)===k?'selected':''}>${GOSHO_KIND_LABEL[k]}</option>`).join('')}
-          </select>
-        </div>
-        <div class="col-span-2 sm:col-span-3">
-          <label class="field-label">別名（「、」区切り。解説書などでの別の呼び名。例：成道御書、下種本仏成道抄）</label>
-          <input class="field-input" placeholder="別名を入力" value="${escapeHtml((rec.aliases||[]).join('、'))}" onchange="updateGoshoAliases('${rec.id}',this.value)">
-        </div>
-      </div>
-      <div class="grid grid-cols-2 sm:grid-cols-6 gap-2 items-end">
-        <div class="col-span-2 sm:col-span-4">
-          <label class="field-label">執筆年代（和暦）</label>
-          <div class="flex flex-wrap gap-1 mb-1">${buildEraChipsHtml('goshoMaster'+idx, rec.era)}</div>
-          <div class="grid grid-cols-4 gap-1">
-            <select class="field-select" onchange="updateGoshoRecord('${rec.id}','era',this.value||null); renderGoshoNameMaster();">${buildEraSelectOptions(rec.era)}</select>
-            <select class="field-select" onchange="updateGoshoRecord('${rec.id}','waYear',this.value?parseInt(this.value):null)">${buildYearSelectOptions(rec.waYear)}</select>
-            <select class="field-select" onchange="updateGoshoRecord('${rec.id}','month',this.value?parseInt(this.value):null)">${buildMonthSelectOptions(rec.month)}</select>
-            <select class="field-select" onchange="updateGoshoRecord('${rec.id}','day',this.value?parseInt(this.value):null)">${buildDaySelectOptions(rec.day)}</select>
-          </div>
-          <label class="text-xs text-gray-500 inline-flex items-center gap-1 mt-1"><input type="checkbox" ${rec.isLeapMonth?'checked':''} onchange="updateGoshoRecord('${rec.id}','isLeapMonth',this.checked); renderGoshoNameMaster();">閏月（例：閏十月）</label>
-        </div>
-        <input class="field-input col-span-2 sm:col-span-1" placeholder="識別メモ（例：身延期）" value="${escapeHtml(rec.note||'')}" onchange="updateGoshoRecord('${rec.id}','note',this.value)">
-        <button class="btn btn-danger text-xs" onclick="removeGoshoNameMaster('${rec.id}')"><i class="fa-solid fa-trash"></i>削除</button>
-      </div>
-      <p class="text-xs text-gray-400 mt-1">表示ラベル：${escapeHtml(goshoRecordLabel(rec))}</p>
-    </div>`;
-  }).join('');
-}
-function updateGoshoRecord(id, key, val){
-  const rec = goshoRecordById(id);
-  if(!rec) return;
-  rec[key] = val;
-  persistAll();
-}
-function updateGoshoAliases(id, val){
-  const rec = goshoRecordById(id);
-  if(!rec) return;
-  const list = String(val||'').split(/[、,，\n]/).map(x=>x.trim()).filter(x=>x && x!==rec.name);
-  rec.aliases = [...new Set(list)];
-  persistAll();
-  renderGoshoNameMaster();
-}
-function addGoshoNameMaster(name){
-  const val = (name!==undefined? name : (document.getElementById('newGoshoNameInput')||{}).value || '').trim();
-  if(!val) return null;
-  const rec = {id: uid(), name: val, kind:'gosho', aliases:[], era:null, waYear:null, month:null, day:null, recipient:'', author:'', note:''};
-  STATE.goshoMaster.push(rec);
-  const input = document.getElementById('newGoshoNameInput');
-  if(input && name===undefined) input.value = '';
-  persistAll();
-  renderGoshoNameMaster();
-  return rec;
-}
-function removeGoshoNameMaster(id){
-  const rec = goshoRecordById(id);
-  if(!rec) return;
-  requestDelete(goshoRecordLabel(rec), ()=>{
-    STATE.goshoMaster = STATE.goshoMaster.filter(g=>g.id!==id);
-    STATE.documents.forEach(d=>{ if(d.goshoId===id) d.goshoId=''; });
-    (STATE.citations||[]).forEach(c=>{ if(c.goshoId===id){ c.goshoId=''; c.status='hold'; } });   // 取り込んだ御文は消さず、保留に戻す
-    persistAll();
-    renderGoshoNameMaster();
-  });
-}
-// 御書名マスターの中から、タイトル文字列に一致するレコードを推定する（取り込み時の自動判定用）。
-// 同名で執筆年代の異なる複数レコードが該当する場合は、誤って別の年代のものに紐付く事故を
-// 避けるため自動選択せず、ユーザーに選んでもらう（空文字を返す）。
-function matchGoshoRecord(title){
-  const rec = matchGoshoRecordObj(title);
-  return rec? rec.id : '';
-}
-// matchGoshoRecord と同じ照合ロジックで、IDではなくレコード本体（era/waYear/month/day等）を返す。
-// 「御文で引用されている御書の、本来の日付」を取得したい場合（parser.js側の年表優先ロジック）に使う。
-function matchGoshoRecordObj(title){
-  if(!title) return null;
-  const t = title.trim();
-  // 別名（aliases）も御書名として扱う。完全一致を最優先し、次に部分一致で推定する
-  const exact = STATE.goshoMaster.filter(g=> goshoNamesOf(g).includes(t));
-  if(exact.length===1) return exact[0];
-  const candidates = STATE.goshoMaster.filter(g=> goshoNamesOf(g).some((n,k)=> (k===0 || n.length>=3) && (t.includes(n) || n.includes(t))));
-  if(candidates.length===1) return candidates[0];
-  return null;
-}
-// 御書マスターの1件が持つ名前（正式名＋別名）の一覧
-function goshoNamesOf(rec){
-  if(!rec) return [];
-  return [rec.name].concat(Array.isArray(rec.aliases)? rec.aliases : []).map(x=>String(x||'').trim()).filter(Boolean);
-}
 // 御書マスターの種類：御書／日寛上人の文段・御指南／経文・論釈／御本尊（未設定は御書）
 // 御書マスターの「種類」。御文の取り込み先を分けるためのもの。
 const GOSHO_KIND_LABEL = {
@@ -1161,8 +555,10 @@ const GOSHO_KIND_LABEL = {
   ikeda:'池田大作', hosoi:'細井日達', abe:'阿部日顕(信雄)', hayase:'早瀬日如',   // 発言の書（大日蓮○○年○月号など）を、人ごとの分類に登録する
   other:'他'
 };
+
 // 人ごとの分類 → 人の名前
 const PERSON_KIND_NAMES = {ikeda:'池田大作', hosoi:'細井日達', abe:'阿部日顕(信雄)', hayase:'早瀬日如'};
+
 // 名前（呼び方の違いを含む）から、人ごとの分類を調べる。当てはまらなければ ''
 function personKindOfName(n){
   const t = String(n||'');
@@ -1172,8 +568,10 @@ function personKindOfName(n){
   if(/早瀬日如|^日如$/.test(t)) return 'hayase';
   return '';
 }
+
 // 以前の版の名前 → 現在の名前（以前の版で保存したデータを、読み込み時に自動で移し替える）
 const GOSHO_KIND_LEGACY = {nikkan:'nichikan', honzon:'gosho'};
+
 function migrateKindNames(){
   let changed = false;
   const isNichikanName = n => /文段$/.test(n||'') || (typeof QX_NIKKAN_NAMES!=='undefined' && QX_NIKKAN_NAMES.includes(n));
@@ -1266,8 +664,11 @@ function onPersonCardSearch(){
   STATE.personBrowse.query = document.getElementById('personCardSearch').value;
   renderPersonCards();
 }
+
 function setPersonKanaFilter(k){ STATE.personBrowse.kana = k; renderPersonCards(); }
+
 function setPersonRelationFilter(k){ STATE.personBrowse.relation = k; renderPersonCards(); }
+
 function setPersonPeriodFilter(k){ STATE.personBrowse.period = k; renderPersonCards(); }
 
 function renderPersonCards(){
@@ -1354,204 +755,25 @@ function openPersonDetail(id){
   `;
   openModal('personDetailModal');
 }
+
 function savePersonDetailNotes(id){
   const p = STATE.persons.find(x=>x.id===id);
   if(!p) return;
   p.notes = document.getElementById('personDetailNotes').value;
   persistAll();
 }
-function collectSyncPayload(){
-  return {
-    documents: STATE.documents, events: STATE.events, persons: STATE.persons, settings: STATE.settings,
-    relationTagsMaster: STATE.relationTagsMaster, goshoMaster: STATE.goshoMaster,
-    mergedGoshos: STATE.mergedGoshos, citations: STATE.citations, eraRanges: STATE.eraRanges,
-    exportedAt: new Date().toISOString()
-  };
-}
-// 通常の操作では、開いたことのない御書の本文（fullText）は端末上でまだ読み込まれていない（軽量版のまま）。
-// バックアップ・同期・公開はいずれも「今メモリ上にある内容」をそのまま書き出すため、
-// 先に全件の本文を読み込んでおかないと、開いていない御書の本文だけが空で保存されてしまう。
-// バックアップ書き出し／Gist同期／公開ビューアへの反映は、必ずこちらを使うこと。
-async function collectSyncPayloadFull(){
-  await Promise.all(STATE.documents.map(d=>ensureDocFullLoaded(d.id)));
-  return collectSyncPayload();
-}
-async function applySyncPayload(payload){
-  STATE.documents = payload.documents || [];
-  // 【本文消失の防止】読み込んだ内容に本文（fullText）が入っている文書は「読み込み済み」として扱い、
-  // 端末の保存領域にも本文を書き込む。こうしないと、後で ensureDocFullLoaded が端末側の
-  // （古い・空の）本文で上書きしてしまい、次の「クラウドに保存」「公開」で本文が空のまま全体に広がる。
-  // 本文が空の文書は印を付けず、端末に残っている本文があればそれを使う。
-  const heavyIds = [];
-  STATE.documents.forEach(d=>{
-    if(typeof d.fullText==='string' && d.fullText.trim()){ d._fullLoaded = true; heavyIds.push(d.id); }
-    else { d._fullLoaded = false; }
-  });
-  STATE.events = payload.events || [];
-  STATE.persons = payload.persons || DEFAULT_PERSONS;
-  STATE.settings = payload.settings || {};
-  // 旧バックアップには無い項目は、現在の値を残す（存在する場合のみ上書き）
-  if(Array.isArray(payload.relationTagsMaster) && payload.relationTagsMaster.length) STATE.relationTagsMaster = payload.relationTagsMaster;
-  if(Array.isArray(payload.goshoMaster)) STATE.goshoMaster = payload.goshoMaster;
-  if(Array.isArray(payload.mergedGoshos)) STATE.mergedGoshos = payload.mergedGoshos;
-  if(Array.isArray(payload.citations)) STATE.citations = payload.citations;
-  migrateKindNames();
-  if(Array.isArray(payload.eraRanges)) STATE.eraRanges = payload.eraRanges;
-  migrateGoshoMasterToRecords();
-  persistAll();
-  populateAuthorSelect();
-  renderRelationTagMaster();
-  renderGoshoNameMaster();
-  renderEraRangeMaster();
-  if(typeof invalidateRubyDict==='function') invalidateRubyDict();
-  if(typeof renderRubyDictEditor==='function') renderRubyDictEditor();
-  renderDocList();
-  renderPersonTable();
-  renderTimeline();
-  renderTerms();
-  await Promise.all(heavyIds.map(id=>persistDocFullNow(id)));
-}
-
-async function exportJson(){
-  const blob = new Blob([JSON.stringify(await collectSyncPayloadFull(), null, 2)], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'gosho_database_backup_'+new Date().toISOString().slice(0,10)+'.json';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
-document.getElementById('importJsonInput').addEventListener('change', function(e){
-  const file = e.target.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = function(ev){
-    try{
-      const payload = JSON.parse(ev.target.result);
-      if(!confirm('現在のデータを、このファイルの内容で上書きします。よろしいですか？')) return;
-      applySyncPayload(payload);
-      alert('読み込みました');
-    }catch(err){
-      alert('読み込みエラー：'+err.message);
-    }
-  };
-  reader.readAsText(file);
-  e.target.value = '';
-});
 
 /* ---- GitHub Gistによる手動クラウド同期 ----
    トークン・Gist IDはこの端末のlocalStorageにのみ保存し、同期データ本体には含めない。
    保存・読み込みはユーザーの明示的なボタン操作でのみ行う（自動送信はしない）。 */
 const SYNC_CONFIG_KEY = 'gosho_sync_config';
-function getSyncConfig(){
-  try{ return JSON.parse(localStorage.getItem(SYNC_CONFIG_KEY)||'{}'); }catch(e){ return {}; }
-}
-function saveSyncConfig(){
-  const cfg = {
-    token: document.getElementById('sync_token').value.trim(),
-    gistId: document.getElementById('sync_gistid').value.trim(),
-    pubGistId: document.getElementById('pub_gistid') ? document.getElementById('pub_gistid').value.trim() : (getSyncConfig().pubGistId||'')
-  };
-  try{ localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(cfg)); }catch(e){}
-}
-function loadSyncConfigIntoForm(){
-  const cfg = getSyncConfig();
-  document.getElementById('sync_token').value = cfg.token || '';
-  document.getElementById('sync_gistid').value = cfg.gistId || '';
-  if(document.getElementById('pub_gistid')) document.getElementById('pub_gistid').value = cfg.pubGistId || '';
-  if(typeof refreshSaveButtonLabel==='function') refreshSaveButtonLabel();
-}
+
 const GIST_FILENAME = 'gosho_app_data.json';
+
 const PUB_GIST_FILENAME = 'kakiokoshi_viewer_data.json'; // 閲覧専用ビューアが読みに行く公開用ファイル名
-
-async function gistCreate(){
-  const status = document.getElementById('syncStatus');
-  const token = document.getElementById('sync_token').value.trim();
-  if(!token){ status.innerHTML = '<span style="color:#c1473f">先にPersonal Access Tokenを入力してください</span>'; return; }
-  status.textContent = 'Gistを作成中…';
-  try{
-    const res = await fetch('https://api.github.com/gists', {
-      method: 'POST',
-      headers: { 'Authorization': 'token '+token, 'Accept': 'application/vnd.github+json' },
-      body: JSON.stringify({
-        description: '御書データベース＆統合年表 同期データ',
-        public: false,
-        files: { [GIST_FILENAME]: { content: JSON.stringify(await collectSyncPayloadFull(), null, 2) } }
-      })
-    });
-    if(!res.ok) throw new Error('作成に失敗しました（HTTP '+res.status+'）。トークンの権限（gist）をご確認ください。');
-    const data = await res.json();
-    document.getElementById('sync_gistid').value = data.id;
-    saveSyncConfig();
-    try{ const raw = data.files && data.files[GIST_FILENAME]; const m = raw && /"exportedAt"\s*:\s*"([^"]+)"/.exec(raw.content||''); if(m) setLastSyncMark(m[1]); }catch(e){}
-    status.innerHTML = '<span style="color:#2f9e6f">作成しました。このGist ID「'+escapeHtml(data.id)+'」を他の端末にも同じように入力してください。</span>';
-  }catch(err){
-    status.innerHTML = '<span style="color:#c1473f">'+escapeHtml(err.message)+'</span>';
-  }
-}
-
-/* ---- Gistへの書き込みの共通部分 ---- */
-function gistHttpErrorMessage(status){
-  if(status===401) return 'トークンが無効か、期限切れです（HTTP 401）';
-  if(status===403 || status===429) return '権限が足りないか、GitHubの回数制限です（HTTP '+status+'）。しばらく待つか、トークンのgist権限をご確認ください';
-  if(status===404) return 'Gistが見つかりません（HTTP 404）。Gist IDと、トークンの持ち主をご確認ください';
-  if(status===422) return '内容が受け付けられませんでした（HTTP 422）。データが大きすぎる可能性があります';
-  return '失敗しました（HTTP '+status+'）';
-}
-// 1つのGistの1ファイルを書き換える。失敗したときは理由つきのErrorを投げる
-async function gistPatch(gistId, token, filename, content){
-  let res;
-  try{
-    res = await fetch('https://api.github.com/gists/'+encodeURIComponent(gistId), {
-      method: 'PATCH',
-      headers: { 'Authorization': 'token '+token, 'Accept': 'application/vnd.github+json' },
-      body: JSON.stringify({ files: { [filename]: { content } } })
-    });
-  }catch(e){
-    throw new Error('通信に失敗しました。回線の状態をご確認ください');
-  }
-  if(!res.ok) throw new Error(gistHttpErrorMessage(res.status));
-  return res;
-}
-// Gist上のファイルから「exportedAt」だけを取り出す（古い端末での上書きの検知用）。取れなければ null
-async function gistFetchExportedAt(gistId, token, filename){
-  try{
-    const res = await fetch('https://api.github.com/gists/'+encodeURIComponent(gistId), {
-      headers: { 'Authorization': 'token '+token, 'Accept': 'application/vnd.github+json' }
-    });
-    if(!res.ok) return null;
-    const data = await res.json();
-    const file = data.files && data.files[filename];
-    if(!file) return null;
-    const text = file.truncated ? await (await fetch(file.raw_url)).text() : file.content;
-    const m = /"exportedAt"\s*:\s*"([^"]+)"/.exec(text||'');
-    return m? m[1] : null;
-  }catch(e){ return null; }
-}
 
 // 「この端末が最後にクラウドと同期した時点」の印（保存した／読み込んだ内容の exportedAt）
 const LAST_SYNC_KEY = 'gosho_last_sync_exported_at';
-function getLastSyncMark(){ try{ return localStorage.getItem(LAST_SYNC_KEY)||''; }catch(e){ return ''; } }
-function setLastSyncMark(v){ try{ if(v) localStorage.setItem(LAST_SYNC_KEY, v); }catch(e){} }
-
-async function gistSaveUi(){
-  const status = document.getElementById('syncStatus');
-  const cfg = { token: document.getElementById('sync_token').value.trim(), gistId: document.getElementById('sync_gistid').value.trim() };
-  saveSyncConfig();
-  if(!cfg.token || !cfg.gistId){ status.innerHTML = '<span style="color:#c1473f">トークンとGist IDの両方を入力してください</span>'; return; }
-  status.textContent = 'クラウドへ保存中…';
-  try{
-    const payload = await collectSyncPayloadFull();
-    await gistPatch(cfg.gistId, cfg.token, GIST_FILENAME, JSON.stringify(payload, null, 2));
-    setLastSyncMark(payload.exportedAt);
-    status.innerHTML = '<span style="color:#2f9e6f"><i class="fa-solid fa-circle-check"></i> クラウドへ保存しました</span>';
-  }catch(err){
-    status.innerHTML = '<span style="color:#c1473f">'+escapeHtml(err.message)+'</span>';
-  }
-}
 
 /* ---- 保存と公開の統合ボタン ----
    ペイロードは1回だけ作り、非公開Gist → 公開Gist の順に同じ内容を書く。結果は別々に表示する。
@@ -1560,170 +782,5 @@ async function gistSaveUi(){
    ・初めて公開も一緒に行う時だけ、確認ダイアログを1回出す。
    ・クラウド側が、この端末の最後の同期より新しい場合は、上書き前に警告する。 */
 const ALSO_PUBLISH_KEY = 'gosho_save_also_publish';
+
 const PUBLISH_CONFIRMED_KEY = 'gosho_publish_confirmed';
-function getAlsoPublish(){
-  try{ const v = localStorage.getItem(ALSO_PUBLISH_KEY); return v===null? true : v==='1'; }catch(e){ return true; }
-}
-function setAlsoPublish(on){
-  try{ localStorage.setItem(ALSO_PUBLISH_KEY, on? '1':'0'); }catch(e){}
-  refreshSaveButtonLabel();
-}
-function refreshSaveButtonLabel(){
-  const cb = document.getElementById('sync_alsoPublish');
-  if(cb) cb.checked = getAlsoPublish();
-  const btn = document.getElementById('saveAndPublishBtn');
-  if(btn) btn.innerHTML = getAlsoPublish()
-    ? '<i class="fa-solid fa-cloud-arrow-up"></i>保存して公開ビューアにも反映'
-    : '<i class="fa-solid fa-cloud-arrow-up"></i>クラウドへ保存';
-}
-
-async function gistSaveAndPublish(){
-  const status = document.getElementById('syncStatus');
-  saveSyncConfig();
-  const token = document.getElementById('sync_token').value.trim();
-  const gistId = document.getElementById('sync_gistid').value.trim();
-  const pubEl = document.getElementById('pub_gistid');
-  const pubId = pubEl? pubEl.value.trim() : '';
-  const also = getAlsoPublish();
-  if(!token || !gistId){ status.innerHTML = '<span style="color:#c1473f">トークンとGist IDの両方を入力してください</span>'; return; }
-
-  // 初めて「保存と同時に公開」する時だけ確認（以後は聞かない）
-  if(also && pubId){
-    let confirmed = false;
-    try{ confirmed = localStorage.getItem(PUBLISH_CONFIRMED_KEY)==='1'; }catch(e){}
-    if(!confirmed){
-      const ok = confirm('【確認】これからは、保存のたびに公開ビューアにも同じ内容が反映されます。\n\n'
-        + '・試しに取り込んだ内容、未確認のAI解説、人物のメモなども公開されます。\n'
-        + '・公開用Gistは、URLやIDを知っている人なら誰でも読めます。\n'
-        + '・公開したくない時は、「公開ビューアにも反映する」のチェックを外して保存してください。\n\n'
-        + 'このまま、保存と公開を行いますか？（キャンセル＝何もしません）');
-      if(!ok){ status.innerHTML = '<span style="color:#888">キャンセルしました（何も保存していません）</span>'; return; }
-      try{ localStorage.setItem(PUBLISH_CONFIRMED_KEY, '1'); }catch(e){}
-    }
-  }
-
-  // 古い端末での上書きの警告
-  status.textContent = 'クラウドの状態を確認中…';
-  const cloudAt = await gistFetchExportedAt(gistId, token, GIST_FILENAME);
-  const mark = getLastSyncMark();
-  if(cloudAt && (!mark || new Date(cloudAt) > new Date(mark))){
-    const when = new Date(cloudAt).toLocaleString('ja-JP');
-    const msg = mark
-      ? 'クラウドの内容（'+when+' 保存）は、この端末が最後に同期した後に、別の端末で更新されています。\n\nこのまま保存すると、そちらの更新が消えます'+(also&&pubId?'（公開ビューアも同じ内容に置き換わります）':'')+'。\n\n本当に保存しますか？'
-      : 'この端末は、まだクラウドと同期した記録がありません。クラウドには別の内容（'+when+' 保存）があります。\n\nこのまま保存すると、クラウドの内容がこの端末の内容に置き換わります'+(also&&pubId?'（公開ビューアも同様です）':'')+'。\n\n本当に保存しますか？（先に「クラウドから読込」をおすすめします）';
-    if(!confirm(msg)){ status.innerHTML = '<span style="color:#888">キャンセルしました（何も保存していません）</span>'; return; }
-  }
-
-  status.textContent = '保存中…';
-  let payload, content;
-  try{
-    payload = await collectSyncPayloadFull();
-    content = JSON.stringify(payload, null, 2);   // 1回だけ作り、両方に同じ内容を送る
-  }catch(err){
-    status.innerHTML = '<span style="color:#c1473f">データの準備に失敗しました：'+escapeHtml(err.message)+'</span>'; return;
-  }
-  // 【本文消失の防止】本文が空の文書がある状態でクラウド・公開ビューアを上書きしないよう、保存前に確認する
-  const emptyDocs = (payload.documents||[]).filter(d=>!d.fullText || !String(d.fullText).trim());
-  if(emptyDocs.length){
-    const names = emptyDocs.slice(0,5).map(d=>'・'+(d.title||'（無題）')).join('\n');
-    if(!confirm('【確認】本文全文が空の書き起こしが '+emptyDocs.length+' 件あります。\n'+names+(emptyDocs.length>5?'\n…ほか':'')+'\n\nこのまま保存すると、クラウド（と公開ビューア）の本文も空に置き換わります。\n\n本当に保存しますか？（「キャンセル」で何も保存しません）')){
-      status.innerHTML = '<span style="color:#888">キャンセルしました（何も保存していません）</span>'; return;
-    }
-  }
-  const kb = Math.round(content.length/1024);
-  const lines = [];
-  try{
-    await gistPatch(gistId, token, GIST_FILENAME, content);
-    setLastSyncMark(payload.exportedAt);
-    lines.push('<span style="color:#2f9e6f"><i class="fa-solid fa-circle-check"></i> クラウドへ保存しました（約'+kb+'KB）</span>');
-  }catch(err){
-    lines.push('<span style="color:#c1473f"><i class="fa-solid fa-circle-xmark"></i> クラウドへの保存に失敗：'+escapeHtml(err.message)+'</span>');
-  }
-  if(also){
-    if(!pubId){
-      lines.push('<span style="color:#b8860b"><i class="fa-solid fa-circle-info"></i> 公開は行いませんでした：公開用Gist IDが未設定です。下の「公開ビューアへの反映」で「初めて公開する」を押してください。</span>');
-    } else {
-      status.innerHTML = lines.join('<br>') + '<br>公開ビューアへ反映中…';
-      try{
-        await gistPatch(pubId, token, PUB_GIST_FILENAME, content);
-        lines.push('<span style="color:#2f9e6f"><i class="fa-solid fa-circle-check"></i> 公開ビューアに反映しました</span>');
-      }catch(err){
-        lines.push('<span style="color:#c1473f"><i class="fa-solid fa-circle-xmark"></i> 公開ビューアへの反映に失敗：'+escapeHtml(err.message)+'</span>');
-      }
-    }
-  }
-  status.innerHTML = lines.join('<br>');
-}
-
-async function gistLoadUi(){
-  const status = document.getElementById('syncStatus');
-  const cfg = { token: document.getElementById('sync_token').value.trim(), gistId: document.getElementById('sync_gistid').value.trim() };
-  saveSyncConfig();
-  if(!cfg.token || !cfg.gistId){ status.innerHTML = '<span style="color:#c1473f">トークンとGist IDの両方を入力してください</span>'; return; }
-  if(!confirm('クラウドの内容で、この端末のデータを上書きします。よろしいですか？')) return;
-  status.textContent = 'クラウドから読み込み中…';
-  try{
-    const res = await fetch('https://api.github.com/gists/'+encodeURIComponent(cfg.gistId), {
-      headers: { 'Authorization': 'token '+cfg.token, 'Accept': 'application/vnd.github+json' }
-    });
-    if(!res.ok) throw new Error('読み込みに失敗しました（HTTP '+res.status+'）');
-    const data = await res.json();
-    const file = data.files && data.files[GIST_FILENAME];
-    if(!file) throw new Error('Gist内にデータファイルが見つかりません');
-    const payload = JSON.parse(file.truncated ? await (await fetch(file.raw_url)).text() : file.content);
-    await applySyncPayload(payload);
-    setLastSyncMark(payload.exportedAt);
-    status.innerHTML = '<span style="color:#2f9e6f"><i class="fa-solid fa-circle-check"></i> クラウドから読み込みました</span>';
-  }catch(err){
-    status.innerHTML = '<span style="color:#c1473f">'+escapeHtml(err.message)+'</span>';
-  }
-}
-
-/* ---- 閲覧専用ビューアへの公開（公開Gist。上のクラウド同期用Gistとは別物） ----
-   ビューア側はトークン無しで読みに行くため、このGistは「公開（Public）」で作成する。
-   書き込み（作成・更新）にはトークンが要るが、閲覧専用ビューアは読み込むだけなので不要。 */
-async function pubGistCreate(){
-  const status = document.getElementById('pubSyncStatus');
-  const token = document.getElementById('sync_token').value.trim();
-  if(!token){ status.innerHTML = '<span style="color:#c1473f">先に上の「①GitHub Gist」欄にPersonal Access Tokenを入力してください</span>'; return; }
-  status.textContent = '公開用Gistを作成中…';
-  try{
-    const res = await fetch('https://api.github.com/gists', {
-      method: 'POST',
-      headers: { 'Authorization': 'token '+token, 'Accept': 'application/vnd.github+json' },
-      body: JSON.stringify({
-        description: '御書データベース＆統合年表 - 書き起こし一覧 公開用データ（閲覧専用ビューア用）',
-        public: true,
-        files: { [PUB_GIST_FILENAME]: { content: JSON.stringify(await collectSyncPayloadFull(), null, 2) } }
-      })
-    });
-    if(!res.ok) throw new Error('作成に失敗しました（HTTP '+res.status+'）。トークンの権限（gist）をご確認ください。');
-    const data = await res.json();
-    document.getElementById('pub_gistid').value = data.id;
-    saveSyncConfig();
-    status.innerHTML = '<span style="color:#2f9e6f">公開しました。このGist ID「'+escapeHtml(data.id)+'」を、閲覧専用ビューアの設定に使ってください。以後は「公開する」ボタンだけで更新できます。</span>';
-  }catch(err){
-    status.innerHTML = '<span style="color:#c1473f">'+escapeHtml(err.message)+'</span>';
-  }
-}
-
-// （内部用）公開用Gistだけを更新する。画面のボタンは「保存して公開ビューアにも反映」に統合済み
-async function pubGistPublish(){
-  const status = document.getElementById('pubSyncStatus');
-  const token = document.getElementById('sync_token').value.trim();
-  const gistId = document.getElementById('pub_gistid').value.trim();
-  saveSyncConfig();
-  if(!token){ status.innerHTML = '<span style="color:#c1473f">先に上の「①GitHub Gist」欄にPersonal Access Tokenを入力してください</span>'; return; }
-  if(!gistId){ status.innerHTML = '<span style="color:#c1473f">先に「初めて公開する」を実行してください</span>'; return; }
-  status.textContent = '公開用ビューアへ反映中…';
-  try{
-    await gistPatch(gistId, token, PUB_GIST_FILENAME, JSON.stringify(await collectSyncPayloadFull(), null, 2));
-    status.innerHTML = '<span style="color:#2f9e6f"><i class="fa-solid fa-circle-check"></i> 公開ビューアに反映しました</span>';
-  }catch(err){
-    status.innerHTML = '<span style="color:#c1473f">'+escapeHtml(err.message)+'</span>';
-  }
-}
-
-/* ============================================================
-   INIT
-   ============================================================ */

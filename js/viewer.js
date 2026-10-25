@@ -20,7 +20,7 @@ function subheadingText(s){
 }
 
 /* ---------- ①：公開Gistの設定と読み込み ----------
-   下のDEFAULT_GIST_IDに、編集アプリの「設定→公開ビューアへの反映」で
+   下のDEFAULT_GIST_IDに、編集アプリの「同期・バックアップ」画面の「公開ビューアの設定」で
    発行したGist IDを入れておくと、リンクを開くだけで読み込みます。
    （代わりに、リンクの末尾に ?gist=あなたのGistID を付けて共有することもできます） */
 const DEFAULT_GIST_ID = '8e67ce5dccc8fdf00e42a3cd84ebaa2b';
