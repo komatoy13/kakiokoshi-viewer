@@ -867,7 +867,7 @@ function renderPersonTable(){
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
         <div>
-          <label class="field-label">関係性バッジ（カード・絞り込み用／設定タブでタグを追加・削除できます）</label>
+          <label class="field-label">関係性バッジ（カード・絞り込み用／「マスター管理」でタグを追加・削除できます）</label>
           <div class="flex flex-wrap gap-1">${STATE.relationTagsMaster.map(t=>`<button type="button" class="filter-btn ${(p.relationshipTags||[]).includes(t)?'active':''}" onclick="togglePersonTag(${idx},'relationshipTags','${escapeHtml(t)}')">${escapeHtml(t)}</button>`).join('')}</div>
         </div>
         <div>
@@ -1376,8 +1376,17 @@ async function collectSyncPayloadFull(){
   await Promise.all(STATE.documents.map(d=>ensureDocFullLoaded(d.id)));
   return collectSyncPayload();
 }
-function applySyncPayload(payload){
+async function applySyncPayload(payload){
   STATE.documents = payload.documents || [];
+  // 【本文消失の防止】読み込んだ内容に本文（fullText）が入っている文書は「読み込み済み」として扱い、
+  // 端末の保存領域にも本文を書き込む。こうしないと、後で ensureDocFullLoaded が端末側の
+  // （古い・空の）本文で上書きしてしまい、次の「クラウドに保存」「公開」で本文が空のまま全体に広がる。
+  // 本文が空の文書は印を付けず、端末に残っている本文があればそれを使う。
+  const heavyIds = [];
+  STATE.documents.forEach(d=>{
+    if(typeof d.fullText==='string' && d.fullText.trim()){ d._fullLoaded = true; heavyIds.push(d.id); }
+    else { d._fullLoaded = false; }
+  });
   STATE.events = payload.events || [];
   STATE.persons = payload.persons || DEFAULT_PERSONS;
   STATE.settings = payload.settings || {};
@@ -1400,6 +1409,7 @@ function applySyncPayload(payload){
   renderPersonTable();
   renderTimeline();
   renderTerms();
+  await Promise.all(heavyIds.map(id=>persistDocFullNow(id)));
 }
 
 async function exportJson(){
@@ -1612,6 +1622,14 @@ async function gistSaveAndPublish(){
   }catch(err){
     status.innerHTML = '<span style="color:#c1473f">データの準備に失敗しました：'+escapeHtml(err.message)+'</span>'; return;
   }
+  // 【本文消失の防止】本文が空の文書がある状態でクラウド・公開ビューアを上書きしないよう、保存前に確認する
+  const emptyDocs = (payload.documents||[]).filter(d=>!d.fullText || !String(d.fullText).trim());
+  if(emptyDocs.length){
+    const names = emptyDocs.slice(0,5).map(d=>'・'+(d.title||'（無題）')).join('\n');
+    if(!confirm('【確認】本文全文が空の書き起こしが '+emptyDocs.length+' 件あります。\n'+names+(emptyDocs.length>5?'\n…ほか':'')+'\n\nこのまま保存すると、クラウド（と公開ビューア）の本文も空に置き換わります。\n\n本当に保存しますか？（「キャンセル」で何も保存しません）')){
+      status.innerHTML = '<span style="color:#888">キャンセルしました（何も保存していません）</span>'; return;
+    }
+  }
   const kb = Math.round(content.length/1024);
   const lines = [];
   try{
@@ -1653,7 +1671,7 @@ async function gistLoadUi(){
     const file = data.files && data.files[GIST_FILENAME];
     if(!file) throw new Error('Gist内にデータファイルが見つかりません');
     const payload = JSON.parse(file.truncated ? await (await fetch(file.raw_url)).text() : file.content);
-    applySyncPayload(payload);
+    await applySyncPayload(payload);
     setLastSyncMark(payload.exportedAt);
     status.innerHTML = '<span style="color:#2f9e6f"><i class="fa-solid fa-circle-check"></i> クラウドから読み込みました</span>';
   }catch(err){
