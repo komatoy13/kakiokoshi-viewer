@@ -35,7 +35,7 @@ function toggleEventForm(){
 
 // 西暦・仏紀・和暦のいずれかで年表の日付を整形する
 function formatYMD(y, m, d){
-  if(y===null || y===undefined || y==='' || isNaN(y)) return '';   // 0（仏紀0年など）は空欄にしない
+  if(y===null || y===undefined || y==='' || isNaN(y)) return '';
   const parts = [y<0 ? '前'+(-y) : y];                              // 紀元前は「前949」のように表す
   if(m) parts.push(m);
   if(m && d) parts.push(d);
@@ -135,6 +135,7 @@ function onEvButsukiInput(){
   if(t===''){ return; }
   const b = parseInt(t,10);
   if(isNaN(b)){ return; }
+  if(b===0){ alert('仏紀に0年はありません（釈尊の入滅の年が仏紀1年、その前の年が−1年です）'); return; }
   applyEvSeireki(seirekiFromButsuki(b));
 }
 
@@ -146,6 +147,7 @@ function resetEventForm(){
   document.getElementById('ev_type').value = 'general';
   initWarekiPickerEv('','','','');
   populateEventRelatedDocSelect('');
+  if(typeof themePickerRender==='function') themePickerRender('ev_themes', []);
   STATE.editingEventId = null;
   const btn = document.getElementById('eventFormSubmitBtn');
   if(btn) btn.innerHTML = '<i class="fa-solid fa-check"></i>年表に追加';
@@ -170,6 +172,7 @@ function editEvent(id){
   document.getElementById('ev_type').value = e.eventType||'general';
   document.getElementById('ev_desc').value = e.description||'';
   populateEventRelatedDocSelect(e.relatedDocId||'');
+  if(typeof themePickerRender==='function') themePickerRender('ev_themes', e.themeTagIds||[]);
   const btn = document.getElementById('eventFormSubmitBtn');
   if(btn) btn.innerHTML = '<i class="fa-solid fa-check"></i>この出来事を更新';
   const cancelBtn = document.getElementById('eventFormCancelBtn');
@@ -200,7 +203,8 @@ function saveManualEvent(){
   const payload = {
     warekiText: wareki, seirekiYear: year,
     seirekiMonth: wk?wk.month:null, seirekiDay: wk?wk.day:null,
-    title, person, eventType, description: desc, relatedDocId, manual:true
+    title, person, eventType, description: desc, relatedDocId, manual:true,
+    themeTagIds: (typeof themePickerValue==='function') ? themePickerValue('ev_themes') : []
   };
   if(STATE.editingEventId){
     const idx = STATE.events.findIndex(e=>e.id===STATE.editingEventId);
@@ -230,11 +234,11 @@ function personAutoEvents(){
   STATE.persons.forEach(p=>{
     const by = personSeireki(p,'birth');
     if(by){ out.push({id:'auto_birth_'+p.id, seirekiYear:by, seirekiMonth:p.birthMonth, seirekiDay:p.birthDay,
-      title: p.name+' 御出生', person:p.name, description:'', auto:true, eventType:'follower',
+      title: p.name+' 御出生', person:p.name, description:'', auto:true, eventType:'follower', themeTagIds: themeIdsOf(p),   // 人物のテーマタグを、そのまま引き継ぐ
       warekiText: p.birthEra? (p.birthEra+(p.birthWaYear===1?'元':p.birthWaYear)+'年') : ''}); }
     const dy = personSeireki(p,'death');
     if(dy){ out.push({id:'auto_death_'+p.id, seirekiYear:dy, seirekiMonth:p.deathMonth, seirekiDay:p.deathDay,
-      title: p.name+' '+(p.deathLabel||'御入滅')+(p.deathAgeText?'（'+p.deathAgeText+'）':''), person:p.name, description:'', auto:true, eventType:'follower',
+      title: p.name+' '+(p.deathLabel||'御入滅')+(p.deathAgeText?'（'+p.deathAgeText+'）':''), person:p.name, description:'', auto:true, eventType:'follower', themeTagIds: themeIdsOf(p),
       warekiText: p.deathEra? (p.deathEra+(p.deathWaYear===1?'元':p.deathWaYear)+'年'+(p.deathMonth?p.deathMonth+'月':'')+(p.deathDay?p.deathDay+'日':'')) : ''}); }
   });
   return out;
@@ -320,6 +324,7 @@ const TL_CHUNK = 250;
 
 function renderTimeline(){
   populatePersonFilter();
+  if(typeof renderThemeBars==='function') renderThemeBars();
   const personFilterVal = document.getElementById('personFilter').value;
   let items = [];
 
@@ -335,6 +340,7 @@ function renderTimeline(){
   });
 
   items = items.filter(passesTypeFilter);
+  if(typeof passesThemeFilter==='function') items = items.filter(passesThemeFilter);   // テーマの絞り込み（themes.js）
   if(personFilterVal!=='all') items = items.filter(i=>i.person===personFilterVal);
   items = items.filter(passesSearch);
   items = items.filter(i=>i.y);
@@ -552,6 +558,7 @@ function renderDocCard(d, opts){
     </div>
     ${d.honbun? `<p class="text-sm mt-3 italic" style="color:#4a4a44;white-space:pre-wrap">「${kanjiReadingToRuby(escapeHtml(d.honbun))}」</p>` : ''}
     ${(d.summary&&d.summary.length)? `<div class="mt-2 flex flex-wrap gap-1">${d.summary.map(s=>`<span class="chip">${escapeHtml(s)}</span>`).join('')}</div>` : ''}
+    ${typeof themeChipsHtml==='function' ? themeChipsHtml(themeIdsOf(d)) : ''}
     ${renderSubheadingsOutline(d.subheadings)}
   </div>`;
 }
@@ -563,11 +570,14 @@ async function openFullTextModal(docId){
   document.getElementById('fullTextModalBody').textContent = '読み込み中…';
   openModal('fullTextModal');
   await ensureDocFullLoaded(docId);
-  FULLTEXT_MODAL_CURRENT = {title: d.title||'（無題）', text: d.fullText || ''};
+  const notes = docPdfNotes(d);
+  FULLTEXT_MODAL_CURRENT = {title: d.title||'（無題）', text: d.fullText || '', notes};
   if(typeof syncRubyModeSelect==='function') syncRubyModeSelect();
+  if(typeof syncPdfNotesControl==='function') syncPdfNotesControl(notes);
   renderStructuredTextInto('fullTextModalBody', d.fullText || '（本文全文が登録されていません）');
   const pdfBtn = document.getElementById('fullTextModalPdfBtn');
-  if(pdfBtn) pdfBtn.onclick = ()=> openPdfPreview(d.title||'（無題）', d.fullText||'');
+  if(pdfBtn) pdfBtn.onclick = ()=> openPdfPreview(d.title||'（無題）', d.fullText||'', {notes});
+  if(typeof setFullTextWordBtn==='function') setFullTextWordBtn(d.title||'（無題）', d.fullText||'', notes);
 }
 
 function renderEventCard(e){
@@ -585,6 +595,7 @@ function renderEventCard(e){
         <h4 class="font-display text-lg mt-1" style="color:var(--navy)">${escapeHtml(e.title)}</h4>
         <p class="text-xs text-gray-500 mt-0.5">${escapeHtml(dateLabel)} ${e.person?'・ '+escapeHtml(e.person):''}</p>
         ${e.description? `<p class="text-sm mt-2">${escapeHtml(e.description)}</p>` : ''}
+        ${typeof themeChipsHtml==='function' ? themeChipsHtml(themeIdsOf(e)) : ''}
         ${relatedDoc? `<button class="btn btn-outline text-xs mt-2" onclick="openFullTextModal('${relatedDoc.id}')"><i class="fa-solid fa-scroll"></i>参照御書：${escapeHtml(relatedDoc.title||'（無題）')}</button>` : ''}
       </div>
       ${(!isAuto && STATE.timelineEditMode)? `<div class="flex gap-1 flex-shrink-0">

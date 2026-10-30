@@ -150,6 +150,8 @@ function mlOpen(goshoId){
   renderStructuredTextInto('fullTextModalBody', text);
   const pdfBtn = document.getElementById('fullTextModalPdfBtn');
   if(pdfBtn) pdfBtn.onclick = ()=> openPdfPreview(e.title, text);
+  if(typeof setFullTextWordBtn==='function') setFullTextWordBtn(e.title, text, []);
+  if(typeof syncPdfNotesControl==='function') syncPdfNotesControl([]);   // 結合文面には、AI解説の欄を出さない
   openModal('fullTextModal');
 }
 

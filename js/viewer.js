@@ -53,6 +53,7 @@ async function bootViewer(){
     STATE.settings = data.settings || {};   // ルビ範囲辞書（settings.rubyDict）を含む
     STATE.persons = (data.persons && data.persons.length) ? data.persons : DEFAULT_PERSONS;
     STATE.relationTagsMaster = data.relationTagsMaster || STATE.relationTagsMaster;
+    STATE.themeTags = Array.isArray(data.themeTags) ? data.themeTags : [];   // テーマタグ（年表・人物の絞り込み）
     STATE.goshoMaster = data.goshoMaster || [];
     STATE.mergedGoshos = data.mergedGoshos || [];
     STATE.citations = Array.isArray(data.citations) ? data.citations : [];

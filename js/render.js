@@ -58,6 +58,10 @@ const PDF_FONT_STACKS = {
   meiryo: '"Meiryo UI","メイリオ",Meiryo,"Hiragino Sans","Noto Sans JP",sans-serif'
 };
 const PDF_SIZES = [9, 10, 10.5, 11, 12, 13, 14, 16, 18];
+const PDF_NOTES_KEY = 'gosho_pdf_notes';             // PDFにAI解説をつけるか（'1'＝つける）
+const PDF_NOTES_SIZE_KEY = 'gosho_pdf_notes_size';   // AI解説の文字サイズ（本文とは別）
+const PDF_NOTES_SIZES = [7, 8, 9, 9.5, 10, 10.5, 11, 12, 13];
+const PDF_NOTES_SIZE_DEFAULT = 9;
 const PDF_SIZE_DEFAULT = 11;
 function getPdfFont(){
   try{ const v = localStorage.getItem(PDF_FONT_KEY); return PDF_FONT_STACKS[v]? v : 'mincho'; }catch(e){ return 'mincho'; }
@@ -75,7 +79,60 @@ function setPdfSize(v){
   const z = document.getElementById('pdfSizeSelect'); if(z) z.value = String(getPdfSize());
 }
 
+/* ---------- PDFにつけるAI解説（本文とは別の文字サイズ） ---------- */
+function getPdfNotes(){ try{ return localStorage.getItem(PDF_NOTES_KEY)==='1'; }catch(e){ return false; } }
+function setPdfNotes(on){
+  try{ localStorage.setItem(PDF_NOTES_KEY, on ? '1' : '0'); }catch(e){}
+  const c = document.getElementById('pdfNotesOn'); if(c) c.checked = getPdfNotes();
+  const z = document.getElementById('pdfNotesSizeSelect'); if(z) z.disabled = !getPdfNotes();
+}
+function getPdfNotesSize(){
+  try{ const n = parseFloat(localStorage.getItem(PDF_NOTES_SIZE_KEY)); return PDF_NOTES_SIZES.includes(n) ? n : PDF_NOTES_SIZE_DEFAULT; }catch(e){ return PDF_NOTES_SIZE_DEFAULT; }
+}
+function setPdfNotesSize(v){
+  const n = parseFloat(v);
+  try{ localStorage.setItem(PDF_NOTES_SIZE_KEY, String(PDF_NOTES_SIZES.includes(n) ? n : PDF_NOTES_SIZE_DEFAULT)); }catch(e){}
+  const z = document.getElementById('pdfNotesSizeSelect'); if(z) z.value = String(getPdfNotesSize());
+}
+// 書き起こし1件分のAI解説（語句・人物・出来事）と注釈を、PDF用の一覧にする
+function docPdfNotes(d){
+  const list = [];
+  ((d && d.aiNotes) || []).forEach(n=>{
+    if(n && (n.item || n.desc)) list.push({item: n.item||'', reading: n.reading||'', desc: n.desc||'', source: n.source||'', credibility: n.credibility||'', category: n.category||'term'});
+  });
+  ((d && d.annotations) || []).forEach(a=>{
+    const t = String(a||'').replace(/^※/,'').trim();
+    if(t) list.push({item:'', reading:'', desc:t, source:'', credibility:'', category:'term'});
+  });
+  return list;
+}
+// 全文の画面の下に、「AI解説をつける」の欄を出す。AI解説が無い書き起こしでは、欄ごと隠す
+function syncPdfNotesControl(notes){
+  const box = document.getElementById('pdfNotesCtl'); if(!box) return;
+  const n = (notes && notes.length) || 0;
+  box.classList.toggle('hidden', !n);
+  const cnt = document.getElementById('pdfNotesCount'); if(cnt) cnt.textContent = n ? '（'+n+'件）' : '';
+  setPdfNotes(getPdfNotes());
+  setPdfNotesSize(getPdfNotesSize());
+}
+function buildPdfNotesHtml(notes){
+  if(!notes || !notes.length) return '';
+  const catLabel = {person:'人物', term:'語句', event:'出来事'};
+  const body = notes.map(n=>{
+    const head = n.item ? `<span class="n-item">${escapeHtml(n.item)}</span>` + (n.reading && n.reading!==n.item ? `<span class="n-reading">（${escapeHtml(n.reading)}）</span>` : '') + `<span class="n-cat">${catLabel[n.category]||'語句'}</span><br>` : '';
+    const desc = escapeHtml(n.desc).replace(/\n/g,'<br>');
+    // 出典があるものだけ「（出典／信頼度）」を付ける（出典が無いものには、信頼度も付けない）
+    const meta = n.source ? ` <span class="n-meta">（出典：${escapeHtml(n.source)}${n.credibility ? '／信頼度'+escapeHtml(n.credibility) : ''}）</span>` : '';
+    return `<div class="pdf-note">${head}${desc}${meta}</div>`;
+  }).join('');
+  return `<section class="pdf-notes"><h2 class="pdf-notes-title">AI解説</h2>${body}</section>`;
+}
+
 const RUBY_KANJI = '\u4E00-\u9FFF\u3005';
+// ふりがなの括弧の中に使える文字：読み（ひらがな・カタカナ・長音・区切りの「・」）と、末尾の注記記号（※など）。
+// 注記記号は、ルビにせず、ルビを付けた語のあとに「(※)」の形で残す。例：舎利弗(しゃりほつ※) → 舎利弗にルビ「しゃりほつ」＋(※)
+const RUBY_READING = 'ぁ-んァ-ヶー・';
+const RUBY_NOTE_MARKS = '※＊†‡★☆';
 const RUBY_SMALL_KANA = 'ゃゅょぁぃぅぇぉゎャュョァィゥェォヮ';
 function toHiraganaKey(t){
   return String(t||'').replace(/[\u30A1-\u30F6]/g, c=>String.fromCharCode(c.charCodeAt(0)-0x60));
@@ -83,7 +140,7 @@ function toHiraganaKey(t){
 // 拍（モーラ）数：小さい「ゃゅょ」等は直前の文字と1拍なので数えない。「っ」「ん」「ー」は1拍
 function rubyMoraCount(reading){
   let n = 0;
-  for(const c of String(reading||'')) if(!RUBY_SMALL_KANA.includes(c)) n++;
+  for(const c of String(reading||'')) if(!RUBY_SMALL_KANA.includes(c) && c!=='・') n++;   // 小さい「ゃゅょ」と、区切りの「・」は数えない
   return n;
 }
 
@@ -121,8 +178,7 @@ function invalidateRubyDict(){ _rubyDictCache = null; }
 // 同じ本文内の根拠：読み → その読みが付いている漢字の連続（土台候補）の集合
 function buildRubyEvidence(text){
   const ev = new Map();
-  const re = new RegExp('['+RUBY_KANJI+']+(?=(?:\\*\\*)?[（(][ぁ-んァ-ヶー]{1,20}[）)])','g');
-  const re2 = new RegExp('(['+RUBY_KANJI+']+)(?:\\*\\*)?[（(]([ぁ-んァ-ヶー]{1,20})[）)]','g');
+  const re2 = new RegExp('(['+RUBY_KANJI+']+)(?:\\*\\*)?[（(](['+RUBY_READING+']{1,40})['+RUBY_NOTE_MARKS+']*[）)]','g');
   let m;
   while((m = re2.exec(String(text||'')))){
     const key = toHiraganaKey(m[2]);
@@ -170,15 +226,16 @@ function kanjiReadingToRuby(escapedLine, evidence){
   const str = String(escapedLine==null? '' : escapedLine);
   const mode = getRubyMode();
   // 手入力の「｜」は土台の始まりの目印。表示には出さない（ルビ・括弧書きのどちらの方式でも除去）
-  const markRe = new RegExp('｜(?=['+RUBY_KANJI+']+(?:\\*\\*)?[（(][ぁ-んァ-ヶー]{1,20}[）)])','g');
+  const markRe = new RegExp('｜(?=['+RUBY_KANJI+']+(?:\\*\\*)?[（(]['+RUBY_READING+']{1,40}['+RUBY_NOTE_MARKS+']*[）)])','g');
   if(mode==='paren') return str.replace(markRe,'');
   const ev = evidence || _rubyEvidence || buildRubyEvidence(str);
-  const re = new RegExp('(｜)?(['+RUBY_KANJI+']+)(\\*\\*)?[（(]([ぁ-んァ-ヶー]{1,20})[）)]','g');
-  return str.replace(re, (m, mark, run, bold, reading, offset)=>{
+  const re = new RegExp('(｜)?(['+RUBY_KANJI+']+)(\\*\\*)?([（(])(['+RUBY_READING+']{1,40})(['+RUBY_NOTE_MARKS+']*)([）)])','g');
+  return str.replace(re, (m, mark, run, bold, open, reading, marks, close, offset)=>{
     const explicit = !!mark || str.charAt(offset-1)==='\u200B';
     const n = rubyBaseLength(run, reading, explicit, ev);
     const head = run.slice(0, run.length-n), base = run.slice(run.length-n);
-    return head + '<ruby>'+base+'<rt>'+reading+'</rt></ruby>'+(bold||'');
+    // 注記記号（※など）は、ルビにせず、ルビを付けた語のあとに「(※)」として残す
+    return head + '<ruby>'+base+'<rt>'+reading+'</rt></ruby>'+(bold||'')+(marks ? open+marks+close : '');
   });
 }
 // エスケープ後の文字列に対してのみ **太字** → <strong> を適用する（安全な順序）
@@ -322,11 +379,14 @@ function previewCurrentFormFullText(){
   const title = document.getElementById('f_title').value || '（無題）';
   const text = document.getElementById('f_fulltext').value || '';
   document.getElementById('fullTextModalTitle').innerHTML = '<i class="fa-solid fa-file-lines mr-2"></i>'+escapeHtml(title);
-  FULLTEXT_MODAL_CURRENT = {title, text};
+  const notes = (typeof currentFormAiNotes==='function') ? currentFormAiNotes() : [];
+  FULLTEXT_MODAL_CURRENT = {title, text, notes};
   syncRubyModeSelect();
+  syncPdfNotesControl(notes);
   renderStructuredTextInto('fullTextModalBody', text);
   const pdfBtn = document.getElementById('fullTextModalPdfBtn');
-  if(pdfBtn) pdfBtn.onclick = ()=> openPdfPreview(title, text);
+  if(pdfBtn) pdfBtn.onclick = ()=> openPdfPreview(title, text, {notes});
+  if(typeof setFullTextWordBtn==='function') setFullTextWordBtn(title, text, notes);
   openModal('fullTextModal');
 }
 
@@ -339,6 +399,7 @@ function buildPrintableHtml(title, bodyHtml, opts){
   opts = opts || {};
   const fontStack = PDF_FONT_STACKS[opts.font] || PDF_FONT_STACKS.mincho;
   const basePt = PDF_SIZES.includes(Number(opts.size))? Number(opts.size) : PDF_SIZE_DEFAULT;
+  const notesPt = PDF_NOTES_SIZES.includes(Number(opts.notesSize)) ? Number(opts.notesSize) : PDF_NOTES_SIZE_DEFAULT;
   const esc = escapeHtml(title||'（無題）');
   const escAttr = esc.replace(/"/g,'\\"');
   return `<!DOCTYPE html>
@@ -380,18 +441,30 @@ function buildPrintableHtml(title, bodyHtml, opts){
   ruby{ ruby-align: center; }
   rt{ font-size:0.5em; color:#1c1c1c; font-weight:400; }
   .print-footnote{ margin-top: 2.2em; font-size:0.77em; color:#999; text-align:center; }
+  /* AI解説：本文とは別の文字サイズ（${notesPt}pt）。本文のあと、新しいページから始める */
+  .pdf-notes{ break-before: page; page-break-before: always; font-size:${notesPt}pt; line-height:1.8; }
+  .pdf-notes-title{ font-size:1.3em; text-align:center; margin:0 0 1em; padding-bottom:0.5em; border-bottom:1.5px solid #1c2b4a; }
+  .pdf-note{ margin:0 0 0.8em; break-inside: avoid; page-break-inside: avoid; }
+  .pdf-note .n-item{ font-weight:700; }
+  .pdf-note .n-reading{ color:#555; }
+  .pdf-note .n-cat{ display:inline-block; font-size:0.8em; color:#fff; background:#6b7080; padding:0 0.5em; border-radius:3pt; margin-left:0.5em; vertical-align:0.1em; }
+  .pdf-note .n-meta{ color:#666; font-size:0.92em; }
 </style>
 </head><body>
   <div class="print-title">${esc}</div>
   ${bodyHtml}
+  ${opts.notesHtml||''}
   <p class="print-footnote">※ ご利用の環境（主に2024年12月より前のiOS/Safari）によっては、ページ番号・ヘッダーが印刷されない場合があります。</p>
 </body></html>`;
 }
 
 // 「PDF出力」ボタンの共通処理：印刷用ウィンドウを開いてブラウザの印刷ダイアログを呼び出す
-function openPdfPreview(title, text){
+// opts.notes＝この書き起こしのAI解説の一覧（docPdfNotes の結果）。「AI解説をつける」がオンのときだけ、本文のあとにつける
+function openPdfPreview(title, text, opts){
+  opts = opts || {};
   const bodyHtml = renderStructuredText(text||'');
-  const html = buildPrintableHtml(title, bodyHtml, {font: getPdfFont(), size: getPdfSize()});
+  const notesHtml = (getPdfNotes() && opts.notes && opts.notes.length) ? buildPdfNotesHtml(opts.notes) : '';
+  const html = buildPrintableHtml(title, bodyHtml, {font: getPdfFont(), size: getPdfSize(), notesHtml, notesSize: getPdfNotesSize()});
   const win = window.open('', '_blank');
   if(!win){
     alert('ポップアップがブロックされました。ブラウザの設定でこのサイトのポップアップを許可してから、もう一度お試しください。');

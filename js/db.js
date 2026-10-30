@@ -58,7 +58,17 @@ function seirekiFromWareki(era, waYear){
   return ERA_TABLE[era] + waYear - 1;
 }
 
-function butsukiFromSeireki(y){ return (y===null||y===undefined||isNaN(y))? null : y+949; }
+/* 仏紀（仏滅後の年数）。0年は無い：釈尊の入滅の年（紀元前949年）が仏紀1年、その前の年が仏紀-1年。
+   西暦にも0年が無い（紀元前1年の次が西暦1年）ので、その境目も数が飛ばないように数える。
+     西暦1年以降           ：仏紀＝西暦＋949        （例：西暦1253年＝仏紀2202年）
+     紀元前949年〜紀元前1年：仏紀＝西暦＋950        （紀元前949年＝仏紀1年、紀元前1年＝仏紀949年。西暦1年＝仏紀950年）
+     紀元前950年より前      ：仏紀＝西暦＋949        （紀元前950年＝仏紀-1年）
+   ※西暦は、紀元前を負の数で持つ（紀元前949年＝-949）。西暦0年は無い。 */
+function butsukiFromSeireki(y){
+  if(y===null||y===undefined||isNaN(y)||y===0) return null;
+  y = Number(y);
+  return (y<0 && y>=-949) ? y+950 : y+949;
+}
 
 // Parse free text like "弘安元年十一月二十九日" -> {era,waYear,month,day,seirekiYear,...}
 function parseWarekiText(text){
@@ -278,9 +288,14 @@ ERA_NAMES_SORTED.length=0; Object.keys(ERA_TABLE).sort((a,b)=>b.length-a.length)
 
 /* ------------------------------------------------------------
    西暦・仏紀・和暦の相互計算（年単位）
-   仏紀＝西暦＋949（仏滅後。このアプリの従来どおり）。西暦＝仏紀−949。
+   仏紀の数え方は、下の butsukiFromSeireki を参照（仏紀に0年は無い。釈尊の入滅の年が仏紀1年）。
    ------------------------------------------------------------ */
-function seirekiFromButsuki(b){ return (b===null||b===undefined||isNaN(b))? null : b-949; }
+// 仏紀 → 西暦。仏紀に0年は無いので、0（や空）は null を返す
+function seirekiFromButsuki(b){
+  if(b===null||b===undefined||isNaN(b)||Number(b)===0) return null;
+  b = Number(b);
+  return (b>=1 && b<=949) ? b-950 : b-949;
+}
 
 // 西暦年 → {era, waYear, alt}。大宝元年（701）より前は null。
 // alt は、その年に改元があった場合の「改元前の元号」（例：1264年 → 文永元年／alt=弘長4年）。
@@ -304,7 +319,7 @@ function describeYearAll(y){
   if(y===null||y===undefined||isNaN(y)) return '';
   const w = warekiFromSeireki(y);
   const bu = butsukiFromSeireki(y);
-  let t = (y<0 ? '紀元前'+(-y)+'年' : '西暦'+y+'年') + '＝' + (bu<0 ? '仏滅前'+(-bu)+'年' : '仏紀'+bu+'年');
+  let t = (y<0 ? '紀元前'+(-y)+'年' : '西暦'+y+'年') + '＝' + (bu===null ? '' : (bu<0 ? '仏滅前'+(-bu)+'年' : '仏紀'+bu+'年'));
   if(w){
     t += '＝'+warekiYearLabel(w.era, w.waYear);
     if(w.alt) t += '（この年に改元があり、改元前は'+warekiYearLabel(w.alt.era, w.alt.waYear)+'。新しい元号で表示）';
@@ -427,7 +442,8 @@ async function persistIndexNow(){
     goshoMaster: STATE.goshoMaster,
     mergedGoshos: STATE.mergedGoshos,
     citations: STATE.citations,
-    eraRanges: STATE.eraRanges
+    eraRanges: STATE.eraRanges,
+    themeTags: STATE.themeTags
   };
   await storageSet(INDEX_KEY, JSON.stringify(payload));
 }
@@ -442,6 +458,7 @@ let STATE = {
   settings: {},
   calendarMode: 'wareki', // 年表の日付は和暦表示に固定
   eraRanges: null, // 時代区分（null＝未設定→初期値を使う）。eras.js で管理
+  themeTags: null, // テーマタグ {id, name, color, order} の配列（null＝未設定。編集アプリで初期の4つを作る）。themes.js で使う
   typeFilters: {doc:true, general:true, follower:true},
   searchQuery: '',
   noteCategoryFilter: 'all',
@@ -674,6 +691,7 @@ function setPersonPeriodFilter(k){ STATE.personBrowse.period = k; renderPersonCa
 function renderPersonCards(){
   const gridEl = document.getElementById('personCardGrid');
   if(!gridEl) return;
+  if(typeof renderThemeBars==='function') renderThemeBars();
   const b = STATE.personBrowse;
 
   const kanaEl = document.getElementById('personKanaIndex');
@@ -701,6 +719,7 @@ function renderPersonCards(){
   if(b.kana!=='all') list = list.filter(p=>kanaRow(p.reading)===b.kana);
   if(b.relation!=='all') list = list.filter(p=>(p.relationshipTags||[]).includes(b.relation));
   if(b.period!=='all') list = list.filter(p=>(p.periodTags||[]).includes(b.period));
+  if(typeof themeFilterActive==='function' && themeFilterActive()) list = list.filter(personPassesTheme);
   if(b.query && b.query.trim()){
     const q = b.query.trim().toLowerCase();
     list = list.filter(p=> (p.name+' '+(p.alias||'')+' '+(p.summary||'')).toLowerCase().includes(q));
@@ -711,7 +730,7 @@ function renderPersonCards(){
     return;
   }
   gridEl.innerHTML = list.map(p=>{
-    const badges = (p.relationshipTags||[]).map(t=>`<span class="chip">${escapeHtml(t)}</span>`).join('');
+    const badges = (p.relationshipTags||[]).map(t=>`<span class="chip">${escapeHtml(t)}</span>`).join('') + (typeof themeIdsOf==='function' ? themeIdsOf(p).map(themeTagById).filter(Boolean).map(themeChipHtml).join('') : '');
     const activity = personActivityLabel(p);
     return `<div class="person-card" onclick="openPersonDetail('${p.id}')">
       <h4 class="font-display text-lg" style="color:var(--navy)">${escapeHtml(p.name)}</h4>
@@ -729,7 +748,7 @@ function openPersonDetail(id){
   const docs = personRelatedDocs(p);
   const events = personRelatedEvents(p);
   document.getElementById('personDetailTitle').textContent = p.name + (p.alias? '（'+p.alias+'）':'');
-  const badges = [...(p.relationshipTags||[]), ...(p.periodTags||[])].map(t=>`<span class="chip">${escapeHtml(t)}</span>`).join('');
+  const badges = [...(p.relationshipTags||[]), ...(p.periodTags||[])].map(t=>`<span class="chip">${escapeHtml(t)}</span>`).join('') + (typeof themeIdsOf==='function' ? themeIdsOf(p).map(themeTagById).filter(Boolean).map(themeChipHtml).join('') : '');
   const activity = personActivityLabel(p);
   const docsHtml = docs.length? docs.map(d=>`<div class="p-2 border-b last:border-0 flex items-center justify-between gap-2" style="border-color:var(--line)">
       <span class="text-sm truncate">${escapeHtml(d.title||'（無題）')}</span>
