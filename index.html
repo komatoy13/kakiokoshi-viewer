@@ -65,6 +65,7 @@
           <span class="text-xs font-semibold ml-2" style="color:var(--gray)">人物：</span>
           <select id="personFilter" class="field-select" style="width:auto" onchange="renderTimeline()"><option value="all">全員</option></select>
         </div>
+      <div id="themeBar" class="flex flex-wrap items-center gap-2 pt-3 border-t hidden" style="border-color:var(--line)"></div>
         <div class="relative">
           <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
           <input type="text" id="timelineSearch" class="field-input pl-8" placeholder="御書名・出来事名・小見出し・御文で検索…" oninput="renderTimeline()">
@@ -117,6 +118,7 @@
           <div id="personPeriodFilter" class="inline-flex flex-wrap gap-1"></div>
         </div>
       </div>
+    <div id="personThemeBar" class="flex flex-wrap items-center gap-2 mb-3 hidden"></div>
       <div id="personCardGrid" class="person-card-grid"></div>
     </section>
 
@@ -172,22 +174,32 @@
             <option value="paren">括弧書き（寂光(じゃっこう)）</option>
           </select>
         </label>
-        <label class="text-xs text-gray-500 flex items-center gap-1" title="PDFの書体。お使いの端末にある書体だけが使えます">PDFフォント
+        <label class="text-xs text-gray-500 flex items-center gap-1" title="PDF・Wordの書体。お使いの端末にある書体だけが使えます">フォント（PDF・Word）
           <select id="pdfFontSelect" class="field-select text-xs" style="width:auto" onchange="setPdfFont(this.value)">
             <option value="mincho">明朝体（おすすめ）</option>
             <option value="gothic">ゴシック体</option>
             <option value="meiryo">Meiryo UI（Windows）</option>
           </select>
         </label>
-        <label class="text-xs text-gray-500 flex items-center gap-1">文字サイズ
+        <label class="text-xs text-gray-500 flex items-center gap-1">本文の文字サイズ
           <select id="pdfSizeSelect" class="field-select text-xs" style="width:auto" onchange="setPdfSize(this.value)">
             <option value="9">9pt</option><option value="10">10pt</option><option value="10.5">10.5pt</option>
             <option value="11">11pt（標準）</option><option value="12">12pt</option><option value="13">13pt</option>
             <option value="14">14pt</option><option value="16">16pt</option><option value="18">18pt</option>
           </select>
         </label>
+          <span id="pdfNotesCtl" class="hidden flex items-center gap-x-3 gap-y-1 flex-wrap">
+            <label class="text-xs text-gray-500 flex items-center gap-1" title="PDFでもWordでも、本文のあとに、新しいページから、この書き起こしのAI解説をつけます"><input type="checkbox" id="pdfNotesOn" onchange="setPdfNotes(this.checked)">AI解説をつける（PDF・Word）<span id="pdfNotesCount"></span></label>
+            <label class="text-xs text-gray-500 flex items-center gap-1">AI解説の文字サイズ
+              <select id="pdfNotesSizeSelect" class="field-select text-xs" style="width:auto" onchange="setPdfNotesSize(this.value)">
+                <option value="7">7pt</option><option value="8">8pt</option><option value="9">9pt（標準）</option><option value="9.5">9.5pt</option><option value="10">10pt</option>
+                <option value="10.5">10.5pt</option><option value="11">11pt</option><option value="12">12pt</option><option value="13">13pt</option>
+              </select></label>
+          </span>
+          
       </div>
       <button id="fullTextModalPdfBtn" class="btn btn-gold"><i class="fa-solid fa-file-pdf"></i>PDF出力</button>
+      <button id="fullTextModalWordBtn" class="btn btn-gold"><i class="fa-solid fa-file-word"></i>Word出力</button>
       <button class="btn btn-outline" onclick="closeModal('fullTextModal')">閉じる</button>
     </div>
   </div>
@@ -276,9 +288,11 @@
 </div>
 
 <script src="js/db.js"></script>
+<script src="js/themes.js"></script>
 <script src="js/eras.js"></script>
 <script src="js/timeline.js"></script>
 <script src="js/render.js"></script>
+<script src="js/docx-export.js"></script>
 <script src="js/ai-notes.js"></script>
 <script src="js/search.js"></script>
 <script src="js/merged-list.js"></script>
