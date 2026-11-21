@@ -53,7 +53,8 @@ async function bootViewer(){
     STATE.settings = data.settings || {};   // ルビ範囲辞書（settings.rubyDict）を含む
     STATE.persons = (data.persons && data.persons.length) ? data.persons : DEFAULT_PERSONS;
     STATE.relationTagsMaster = data.relationTagsMaster || STATE.relationTagsMaster;
-    STATE.themeTags = Array.isArray(data.themeTags) ? data.themeTags : [];   // テーマタグ（年表・人物の絞り込み）
+    STATE.themeTags = Array.isArray(data.themeTags) ? data.themeTags : [];
+    STATE.issueTags = Array.isArray(data.issueTags) ? data.issueTags : [];   // 論点（法論資料）   // テーマタグ（年表・人物の絞り込み）
     STATE.goshoMaster = data.goshoMaster || [];
     STATE.mergedGoshos = data.mergedGoshos || [];
     STATE.citations = Array.isArray(data.citations) ? data.citations : [];
@@ -110,10 +111,11 @@ function switchTab(tabName){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   const view = document.getElementById('view-'+tabName);
   if(view) view.classList.add('active');
-  if(tabName==='archive') setKakiokoshiMode('timeline'); // 「書き起こし」タブは必ず年表モードから始まる
+  if(tabName==='archive') setKakiokoshiMode('list'); // 「書き起こし」タブは必ず一覧モードから始まる（年表へは右下のボタン）
   if(tabName==='terms') renderTerms();
   if(tabName==='persons') renderPersonCards();
   if(tabName==='mergedlist') renderMergedList();
+  if(tabName==='houron') renderHouron();
   if(tabName==='search') renderSearchResults();
   if(!isWideScreen()) closeSidebar();
   window.scrollTo({top:0, behavior:'smooth'});

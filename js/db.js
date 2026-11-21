@@ -214,6 +214,7 @@ const CATEGORY_META = {
   gohoon:{label:'御報恩勤行会', color:'var(--c-gohoon)'},
   taikai:{label:'御大会式', color:'var(--c-taikai)'},
   sokan:{label:'総幹部会', color:'var(--c-sokan)'},
+  danshibucho:{label:'総男子部長指導', color:'var(--c-danshibucho)'},
   rokkan:{label:'六巻抄', color:'var(--c-rokkan)'},
   other:{label:'その他', color:'var(--c-other)'}
 };
@@ -443,7 +444,8 @@ async function persistIndexNow(){
     mergedGoshos: STATE.mergedGoshos,
     citations: STATE.citations,
     eraRanges: STATE.eraRanges,
-    themeTags: STATE.themeTags
+    themeTags: STATE.themeTags,
+    issueTags: STATE.issueTags
   };
   await storageSet(INDEX_KEY, JSON.stringify(payload));
 }
@@ -458,6 +460,7 @@ let STATE = {
   settings: {},
   calendarMode: 'wareki', // 年表の日付は和暦表示に固定
   eraRanges: null, // 時代区分（null＝未設定→初期値を使う）。eras.js で管理
+  issueTags: null, // 論点（法論用の分類）{id, name, color, order} の配列。御文側は issueTagIds。issues.js で使う
   themeTags: null, // テーマタグ {id, name, color, order} の配列（null＝未設定。編集アプリで初期の4つを作る）。themes.js で使う
   typeFilters: {doc:true, general:true, follower:true},
   searchQuery: '',
@@ -570,11 +573,12 @@ const GOSHO_KIND_LABEL = {
   gosho:'御書', nikko:'日興上人・日目上人', nichikan:'日寛上人', shoshi:'正師御文', sutra:'経文', ronshaku:'論釈',
   bunsho_sho:'文証(邪義/正像)',
   ikeda:'池田大作', hosoi:'細井日達', abe:'阿部日顕(信雄)', hayase:'早瀬日如',   // 発言の書（大日蓮○○年○月号など）を、人ごとの分類に登録する
+  asai_sensei:'浅井先生', asai_kaicho:'浅井会長',                                    // 浅井先生・浅井会長の発言（講演・指導など）
   other:'他'
 };
 
 // 人ごとの分類 → 人の名前
-const PERSON_KIND_NAMES = {ikeda:'池田大作', hosoi:'細井日達', abe:'阿部日顕(信雄)', hayase:'早瀬日如'};
+const PERSON_KIND_NAMES = {ikeda:'池田大作', hosoi:'細井日達', abe:'阿部日顕(信雄)', hayase:'早瀬日如', asai_sensei:'浅井先生', asai_kaicho:'浅井会長'};
 
 // 名前（呼び方の違いを含む）から、人ごとの分類を調べる。当てはまらなければ ''
 function personKindOfName(n){
@@ -583,6 +587,8 @@ function personKindOfName(n){
   if(/細井日達|^日達$/.test(t)) return 'hosoi';
   if(/阿部日顕|阿部信雄|^日顕$/.test(t)) return 'abe';
   if(/早瀬日如|^日如$/.test(t)) return 'hayase';
+  if(/浅井会長/.test(t)) return 'asai_kaicho';
+  if(/浅井先生|浅井昭衞/.test(t)) return 'asai_sensei';
   return '';
 }
 
