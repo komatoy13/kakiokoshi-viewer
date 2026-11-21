@@ -16,6 +16,7 @@
   --c-gohoon:#7c5cc7;
   --c-taikai:#c1473f;
   --c-sokan:#d9822b;
+  --c-danshibucho:#a0526b;
   --c-rokkan:#5b5cc9;
   --c-event:#b8952e;
   --c-follower:#4f8f7d;
@@ -426,3 +427,45 @@ body{
 .theme-btn .theme-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--tc,#6b6f7a);}
 .filter-btn.theme-btn.active{background:var(--tc,#6b6f7a);border-color:var(--tc,#6b6f7a);color:#fff;}
 .filter-btn.theme-btn.active .theme-dot{background:#fff;}
+
+
+/* 法論資料（論点別の発言一覧） */
+.hr-group{display:flex;align-items:center;gap:8px;font-family:'Shippori Mincho',serif;font-weight:700;font-size:16px;color:var(--tc,#1c2b4a);margin:0 0 10px;padding-bottom:6px;border-bottom:2px solid var(--tc,#1c2b4a);}
+.hr-group .theme-dot{display:inline-block;width:11px;height:11px;border-radius:50%;background:var(--tc,#1c2b4a);}
+.hr-count{margin-left:auto;font-size:12px;font-weight:600;color:#6b7080;}
+.hr-item{padding:10px 0;border-bottom:1px dashed var(--line);}
+.hr-item:last-child{border-bottom:none;}
+.hr-head{font-size:13px;line-height:1.7;margin-bottom:4px;}
+.hr-speaker{display:inline-block;font-size:11.5px;font-weight:700;padding:0 8px;border-radius:999px;background:var(--navy);color:#fff;}
+.hr-src{font-weight:700;color:var(--navy);}
+.hr-text{font-size:14px;line-height:1.9;white-space:pre-wrap;word-break:break-word;}
+.hr-check{display:flex;align-items:center;gap:6px;font-size:11.5px;color:#6b7080;margin-bottom:4px;cursor:pointer;}
+
+/* 年表の行の描き分け：書き起こし＝主役（濃く・大きく）、出来事＝脇役（軽く）、人物＝淡く・小さく
+   色は増やさず、重みの差と、行頭の小さな単色の印（巻物・旗・人型）で見分ける。種類（カテゴリ）の色は、右端の小さな文字にだけ残す */
+.simple-row .sr-ico{flex-shrink:0; width:18px; text-align:center; line-height:1;}
+.simple-row .sr-cat{font-size:11px; font-weight:700; white-space:nowrap; flex-shrink:0; letter-spacing:.02em;}
+.simple-row.sr-doc{border-left-width:4px; border-left-color:var(--ink); padding:11px 12px; font-size:14px;}
+.simple-row.sr-doc .sr-ico{color:var(--ink); font-size:16px;}
+.simple-row.sr-doc .sr-title{font-family:'Shippori Mincho',serif; font-size:15px;}
+.simple-row .sr-extra:empty{display:none;}        /* 補足の文がない行で、空の欄のせいで「›」が次の行に落ちないように */
+.simple-row .sr-br{display:none;}
+.simple-row.sr-doc .sr-title{max-width:260px;}
+@media (max-width:640px){
+  /* 狭い画面では、書き起こしの行を2段にする：上＝日付・種類（右端）／下＝題名・補足・「›」 */
+  .simple-row.sr-doc .sr-cat{order:1; margin-left:auto;}
+  .simple-row.sr-doc .sr-br{display:block; order:2; flex-basis:100%; height:0;}
+  .simple-row.sr-doc .sr-title, .simple-row.sr-doc .sr-extra, .simple-row.sr-doc .sr-chev{order:3;}
+}
+.simple-row.sr-event{background:transparent; border-top-color:transparent; border-right-color:transparent; border-bottom-color:transparent; border-left-width:3px; padding:6px 12px; margin-bottom:3px;}
+.simple-row.sr-event .sr-ico{color:var(--sr-c, var(--c-event)); font-size:13px;}
+.simple-row.sr-event .sr-title{font-weight:500; font-size:13px;}
+.simple-row.sr-person{background:transparent; border-color:transparent; border-left-width:3px; padding:3px 12px; margin-bottom:1px; font-size:12px; color:var(--gray);}
+.simple-row.sr-person .sr-ico{color:var(--gray); font-size:12px;}
+.simple-row.sr-person .sr-title{font-weight:400; font-size:12px; color:var(--gray);}
+.simple-row.sr-person .sr-extra{font-size:11px;}
+.simple-row.sr-person .sr-chev{color:var(--line);}
+.simple-row.sr-event:hover, .simple-row.sr-person:hover{background:#fff8e8;}
+/* 一覧モード：題名の下の、御文（要文）の最初の一文（2行まで） */
+.simple-row .sr-sub{flex-basis:100%; margin-top:3px; font-size:12.5px; line-height:1.6; color:var(--gray); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
+
