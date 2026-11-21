@@ -45,6 +45,7 @@
   <div class="tab-btn" data-tab="terms"><i class="fa-solid fa-book-open"></i>AI解説（用語辞典）</div>
   <div class="tab-btn" data-tab="persons"><i class="fa-solid fa-users"></i>人物データベース</div>
   <div class="tab-btn" data-tab="mergedlist"><i class="fa-solid fa-layer-group"></i>結合した御書</div>
+  <div class="tab-btn" data-tab="houron"><i class="fa-solid fa-scale-balanced"></i>法論資料（論点別の発言）</div>
   <div class="tab-btn" data-tab="search"><i class="fa-solid fa-magnifying-glass"></i>横断検索</div>
 </nav>
 
@@ -53,7 +54,7 @@
 
     <!-- ============ VIEW: 書き起こし（統合年表／書き起こし一覧の2モードを1タブにまとめたもの） ============ -->
     <section id="view-archive" class="view active">
-      <div id="khMode-timeline">
+      <div id="khMode-timeline" style="display:none">
       <div class="panel p-4 mb-6 space-y-3">
         <p class="text-xs text-gray-400"><i class="fa-solid fa-hand-pointer mr-1"></i>項目をタップすると詳細が開きます（日付は和暦表示）</p>
         <div id="eraJumpBar" class="flex flex-wrap items-center gap-2 pt-3 border-t" style="border-color:var(--line)"></div>
@@ -73,9 +74,9 @@
       </div>
       <div id="timelineContainer" class="timeline-wrap"></div>
       </div>
-      <div id="khMode-list" style="display:none">
+      <div id="khMode-list">
       <div class="panel p-4 mb-6">
-        <p class="text-sm text-gray-500"><i class="fa-solid fa-circle-info mr-1"></i>統合年表に出ていない御書・御指導（総幹部会など）も、ここからは必ず見つけられます。カテゴリを選び、次に題名を選んでください。</p>
+        <p class="text-sm text-gray-500"><i class="fa-solid fa-circle-info mr-1"></i>カテゴリを選び、次に題名を選んでください。</p>
       </div>
       <div id="archiveContainer"></div>
       </div>
@@ -136,7 +137,17 @@
       <div id="mlList"></div>
     </section>
 
-    <!-- ============ VIEW: 横断検索 ============ -->
+    <!-- ============ VIEW: 法論資料（論点別の発言一覧） ============ -->
+  <section id="view-houron" class="view">
+    <div class="panel p-4 mb-4 space-y-2">
+      <p class="text-xs text-gray-500">登録された御文（発言）を、<b>論点</b>ごとに分類して並べた一覧です（例：「正本堂を戒壇と意義付けた」「田中智学について語ったもの」）。話者の種類で絞れます。</p>
+      <div id="houronControls"></div>
+    </div>
+    <div id="houronList"></div>
+    <div id="houronApplyBar" class="hidden"></div>
+  </section>
+
+  <!-- ============ VIEW: 横断検索 ============ -->
     <section id="view-search" class="view">
       <div class="panel p-4 mb-6 space-y-3">
         <div class="relative">
@@ -277,7 +288,7 @@
 <!-- 「書き起こし」タブ：年表モード⇄一覧モードの切り替えボタン（このタブの時だけ表示） -->
 <div id="kakiokoshiModeToggleWrap" class="kh-mode-toggle-wrap">
   <button type="button" id="kakiokoshiModeToggleBtn" class="kh-mode-toggle-btn" onclick="toggleKakiokoshiMode()">
-    <i class="fa-solid fa-list"></i>一覧モードへ
+    <i class="fa-solid fa-timeline"></i>年表モードへ
   </button>
 </div>
 
@@ -293,6 +304,7 @@
 <script src="js/timeline.js"></script>
 <script src="js/render.js"></script>
 <script src="js/docx-export.js"></script>
+<script src="js/issues.js"></script>
 <script src="js/ai-notes.js"></script>
 <script src="js/search.js"></script>
 <script src="js/merged-list.js"></script>
